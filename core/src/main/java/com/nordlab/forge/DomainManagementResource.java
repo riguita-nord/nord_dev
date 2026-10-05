@@ -205,4 +205,36 @@ public class DomainManagementResource {
     public Response revokeApiKey(@PathParam("wid") long wid,@PathParam("keyId") long keyId,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
         unsafe(session,csrf); long actor=uid(session); forge.requireWorkspace(actor,wid,"admin"); db.execute("UPDATE api_keys SET revoked=TRUE WHERE id=? AND workspace_id=?",keyId,wid); forge.audit(wid,actor,"api_key.revoked",String.valueOf(keyId),null); return Response.ok(Map.of("ok",true)).build();
     }
+    @PUT @Path("/workspaces/{wid}")
+    public Response updateWorkspace(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
+        unsafe(session,csrf); long actor=uid(session); forge.requireWorkspace(actor,wid,"admin");
+        Map<String,Object> w=forge.workspace(wid); String name=text(b,"name"); if(name.isBlank()) name=String.valueOf(w.get("name"));
+        db.execute("UPDATE workspaces SET name=? WHERE id=?",name,wid); forge.audit(wid,actor,"workspace.updated",String.valueOf(wid),name);
+        return Response.ok(forge.workspace(wid)).build();
+    }
+
+    @DELETE @Path("/products/{pid}")
+    public Response deleteProduct(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
+        unsafe(session,csrf); long actor=uid(session); Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found");
+        long wid=((Number)p.get("workspace_id")).longValue(); forge.requireWorkspace(actor,wid,"admin");
+        for(Map<String,Object> r:db.query("SELECT storage_path FROM releases WHERE product_id=?",pid)) storage.delete(String.valueOf(r.get("storage_path")));
+        db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
+        db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
+        db.execute("DELETE FROM protection_installations WHERE product_id=?",pid);
+        db.execute("DELETE FROM protection_builds WHERE product_id=?",pid);
+        db.execute("DELETE FROM product_protection WHERE product_id=?",pid);
+        db.execute("DELETE FROM license_logs WHERE product_id=?",pid);
+        db.execute("DELETE FROM license_activations WHERE license_id IN(SELECT id FROM licenses WHERE product_id=?)",pid);
+        db.execute("DELETE FROM licenses WHERE product_id=?",pid);
+        db.execute("DELETE FROM entitlements WHERE product_id=?",pid);
+        db.execute("DELETE FROM purchase_messages WHERE thread_id IN(SELECT id FROM purchase_threads WHERE product_id=?)",pid);
+        db.execute("DELETE FROM purchase_threads WHERE product_id=?",pid);
+        db.execute("UPDATE support_tickets SET product_id=NULL WHERE product_id=?",pid);
+        db.execute("DELETE FROM releases WHERE product_id=?",pid);
+        db.execute("DELETE FROM products WHERE id=?",pid);
+        forge.audit(wid,actor,"product.deleted",String.valueOf(pid),String.valueOf(p.get("name")));
+        return Response.ok(Map.of("ok",true)).build();
+    }
+
+
 }
