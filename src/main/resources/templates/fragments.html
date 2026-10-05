@@ -1,20 +1,18 @@
 <!doctype html><html xmlns:th="http://www.thymeleaf.org"><body>
-<div th:fragment="dock" class="app-dock" aria-label="Nord applications"><a href="/app" class="dock-mark" title="Nord Dev">N</a><span class="dock-separator"></span><a href="/workspaces?area=developer" class="dock-app selected" title="Developer area">DV</a><a href="/workspaces?area=client" class="dock-app" title="Client area">CL</a><a href="/admin" th:if="${canAdmin}" class="dock-app" title="Administration">AD</a><a href="/workspaces?area=developer&amp;new=1" class="dock-add" title="Create workspace">+</a></div>
+<div th:fragment="dock" class="app-dock" aria-label="Nord applications"><a href="/app" class="dock-mark" title="Nord Dev">N</a><span class="dock-separator"></span><a href="/workspaces" class="dock-app" th:classappend="${active != 'client-home'} ? ' selected'" title="Developer workspace">DV</a><a href="/client-area" class="dock-app" th:classappend="${active == 'client-home'} ? ' selected'" title="Casa · área do cliente">⌂</a><a href="/workspaces?new=1" class="dock-add" title="Criar workspace">+</a></div>
 <aside th:fragment="sidebar(active)" class="rail">
   <a class="brand" href="/app" aria-label="Nord Dev home"><span class="brand-mark">N</span><span class="brand-word">NORD<span>DEV</span></span></a>
-  <div class="rail-label">WORKSPACE</div>
+  <div class="rail-label">DEVELOPER</div>
   <a class="nav-link" th:classappend="${active == 'overview'} ? ' selected'" href="/app"><span>⌂</span><b>Visão geral</b></a>
-  <a class="nav-link" th:classappend="${active == 'workspaces'} ? ' selected'" href="/workspaces?area=developer"><span>▦</span><b>Workspaces</b></a>
-  <a class="nav-link" th:classappend="${active == 'clients'} ? ' selected'" href="/workspaces?area=client"><span>♧</span><b>Área de cliente</b></a>
-  <a class="nav-link" href="/workspaces?area=developer"><span>⌘</span><b>Área de desenvolvimento</b></a>
+  <a class="nav-link" th:classappend="${active == 'workspaces'} ? ' selected'" href="/workspaces"><span>▦</span><b>Workspaces</b></a>
   <div class="rail-label spaced">BUILD</div>
   <a class="nav-link" th:classappend="${active == 'services'} ? ' selected'" href="/services"><span>▤</span><b>Service studio</b></a>
   <a class="nav-link" th:classappend="${active == 'licenses'} ? ' selected'" href="/licenses"><span>⌑</span><b>Licenças</b></a>
   <a class="nav-link" th:classappend="${active == 'updates'} ? ' selected'" href="/updates"><span>↻</span><b>Builds &amp; releases</b></a>
   <div class="rail-label spaced">RECURSOS</div>
   <a class="nav-link" th:classappend="${active == 'docs'} ? ' selected'" href="/docs"><span>▣</span><b>Documentação</b></a>
-  <a class="nav-link" th:if="${canAdmin}" th:classappend="${active == 'admin'} ? ' selected'" href="/admin"><span>◇</span><b>Administração</b></a>
   <div class="rail-bottom"><span class="status-dot"></span> <span class="status-text">Developer workspace</span>
+    <div class="rail-bottom-links"><a th:if="${canAdmin}" class="nav-link" th:classappend="${active == 'admin'} ? ' selected'" href="/admin"><span>◇</span><b>Administração</b></a><a class="nav-link" th:classappend="${active == 'account'} ? ' selected'" href="/account/settings"><span>⚙</span><b>Definições da conta</b></a></div>
     <form th:action="@{/logout}" method="post"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/><button class="account-button" type="submit"><span class="avatar" th:text="${#strings.substring(#authentication.name,0,1).toUpperCase()}">R</span><span class="account-name" th:text="${#authentication.name}">Account</span><span class="more">⋯</span></button></form>
   </div>
 </aside>

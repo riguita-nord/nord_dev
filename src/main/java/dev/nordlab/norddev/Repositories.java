@@ -16,6 +16,7 @@ interface ServiceProjectRepository extends JpaRepository<ServiceProject,Long> { 
 interface ReleaseRepository extends JpaRepository<Release,Long> { List<Release> findAllByOrderByCreatedAtDesc(); Optional<Release> findFirstByChannelAndStatusOrderByCreatedAtDesc(String channel,String status); }
 interface WorkspaceRepository extends JpaRepository<Workspace,Long> {
     List<Workspace> findAllByAreaOrderByCreatedAtDesc(String area);
+    long countByArea(String area);
     List<Workspace> findAllByOrderByCreatedAtDesc();
     List<Workspace> findAllByOwnerEmailIgnoreCaseAndAreaOrderByCreatedAtDesc(String ownerEmail,String area);
 }
