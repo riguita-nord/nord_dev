@@ -40,6 +40,21 @@ public class AdminResource {
     @PUT @Path("/maintenance")
     public Response maintenance(@CookieParam("NF_ADMIN_SESSION") String token,Map<String,Object> b){ sessions.require(token); return proxy("PUT","/api/v2/internal/admin/maintenance","{\"enabled\":"+Boolean.parseBoolean(String.valueOf(b.get("enabled")))+"}"); }
 
+    @GET @Path("/runtime")
+    public Response runtime(@CookieParam("NF_ADMIN_SESSION") String token){ sessions.require(token); return proxy("GET","/api/v2/internal/admin/runtime",null); }
+    @GET @Path("/audit")
+    public Response audit(@CookieParam("NF_ADMIN_SESSION") String token){ sessions.require(token); return proxy("GET","/api/v2/internal/admin/audit",null); }
+    @PUT @Path("/users/{uid}/status")
+    public Response userStatus(@PathParam("uid") long uid,@CookieParam("NF_ADMIN_SESSION") String token,Map<String,Object> b){
+        sessions.require(token); String status=String.valueOf(b.getOrDefault("status","active")).replace("\"","");
+        return proxy("PUT","/api/v2/internal/admin/users/"+uid+"/status","{\"status\":\""+status+"\"}");
+    }
+    @PUT @Path("/workspaces/{wid}/status")
+    public Response workspaceStatus(@PathParam("wid") long wid,@CookieParam("NF_ADMIN_SESSION") String token,Map<String,Object> b){
+        sessions.require(token); String status=String.valueOf(b.getOrDefault("status","active")).replace("\"","");
+        return proxy("PUT","/api/v2/internal/admin/workspaces/"+wid+"/status","{\"status\":\""+status+"\"}");
+    }
+
     private Response proxy(String method,String path,String body){
         try{
             HttpRequest.Builder rb=HttpRequest.newBuilder(URI.create(core+path)).timeout(Duration.ofSeconds(8)).header("X-Nord-Admin-Service",serviceSecret).header("Accept","application/json");
