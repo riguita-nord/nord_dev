@@ -1,0 +1,9 @@
+[Unit]
+Description=Nord Forge Update Request Watcher
+
+[Path]
+PathExists=/var/lib/nord-forge/control/update.request
+Unit=nord-forge-update.service
+
+[Install]
+WantedBy=multi-user.target
