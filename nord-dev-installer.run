@@ -18,7 +18,7 @@ install_app(){
   apt-get install -y openjdk-21-jdk-headless maven git ca-certificates curl
   java -version 2>&1 | grep -Eq ' version "(2[1-9]|[3-9][0-9])\.' || { echo "Java 21 or newer is required." >&2; exit 1; }
   id norddev >/dev/null 2>&1 || useradd --system --home-dir "$STATE_DIR" --shell /usr/sbin/nologin norddev
-  install -d -o norddev -g norddev "$STATE_DIR/data" "$STATE_DIR/work"
+  install -d -o norddev -g norddev "$STATE_DIR/data" "$STATE_DIR/work" "$STATE_DIR/.m2/repository"
   install -d -o root -g norddev -m 0750 "$APP_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
   if [[ ! -f "$CONFIG_DIR/nord-dev.env" ]]; then
     umask 027
@@ -34,7 +34,7 @@ ENV
   rm -rf "$work"; install -d -o norddev -g norddev "$work"
   git clone --depth 1 --branch "$BRANCH" "$REPO" "$work/source"
   chown -R norddev:norddev "$work"
-  runuser -u norddev -- bash -lc "cd '$work/source' && mvn --batch-mode --no-transfer-progress clean verify"
+  runuser -u norddev -- bash -lc "cd '$work/source' && mvn --batch-mode --no-transfer-progress -Dmaven.repo.local=$STATE_DIR/.m2/repository clean verify"
   local jar="$work/source/target/nord-dev-0.1.0.jar"
   [[ -f "$jar" ]] || { echo "Build did not produce expected JAR: $jar" >&2; exit 1; }
   if [[ -f "$APP_DIR/nord-dev.jar" ]]; then
