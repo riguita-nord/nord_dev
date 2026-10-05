@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -e
+case "${1:-status}" in
+  status) systemctl --no-pager --full status nord-forge nord-forge-admin ;;
+  restart) sudo systemctl restart nord-forge nord-forge-admin ;;
+  logs) journalctl -fu nord-forge ;;
+  admin-logs) journalctl -fu nord-forge-admin ;;
+  update) sudo /opt/nord-forge/nord-forge-installer.run update ;;
+  version) cat /opt/nord-forge/VERSION ;;
+  *) echo "Usage: nord-forge [status|restart|logs|admin-logs|update|version]" >&2; exit 2;;
+esac

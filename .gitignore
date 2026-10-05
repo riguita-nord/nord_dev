@@ -1,6 +1,9 @@
-/target/
-/data/
-/.env
-*.log
+target/
+**/target/
 .idea/
+.vscode/
 *.iml
+.env
+*.log
+data/
+storage/

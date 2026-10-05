@@ -1,35 +1,61 @@
-# Nord Dev
+# Nord Forge V2
 
-Java 21 developer platform with global Nord ID sign-in, a first-run setup wizard, service templates, license management, and admin-managed releases.
+Nord Forge V2 is the Java rewrite of the Nord development platform. It replaces the previous nord_dev prototype and ports the Forge product model into a service-oriented Java 21 / Quarkus runtime inspired by Nord SaaS Lite.
 
-## One-command server install
+## Product surfaces
 
-On a fresh Debian/Ubuntu server with internet access and SSH access:
+- **Client Area** — account, Forge Key, purchased products, licenses, marketplace, downloads and support.
+- **Developer Studio** — isolated workspace surface for products, releases, licensing, docs, public pages, team, purchases, infrastructure, integrations and audit.
+- **Administration** — independent Java service. Platform Owner launches it from Forge through a signed short-lived SSO handoff.
+- **Runtime licensing API** — Forge Key + product validation for FiveM/server integrations.
+- **Installer/update system** — commit-pinned GitHub source, build-before-stop update transaction, backup, health checks and rollback.
+
+The Client Area and Developer Studio intentionally do not share a sidebar. A global app rail changes surface; developer workspaces only exist inside Developer Studio.
+
+## Runtime
+
+- Java 21
+- Quarkus
+- H2 file database
+- REST/Jackson
+- dedicated Administration service
+- systemd installation
+- no hard-coded production credentials
+
+## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/riguita-nord/nord_dev/main/nord-dev-installer.run -o nord-dev-installer.run && chmod +x nord-dev-installer.run && sudo ./nord-dev-installer.run install
+chmod +x nord-forge-installer.run
+sudo ./nord-forge-installer.run install
 ```
 
-Then open `http://<server-ip>:8080/setup`. The first account created in the wizard becomes the protected **Platform Owner**. Later accounts are created inside Admin; only the Owner can create another administrator. The wizard saves the platform name, public URL, and timezone.
-
-The installer installs Java 21 and Maven, builds and verifies the app, creates the `norddev` system account and systemd service, and configures a persistent H2 database. It supports `install`, `update`, `status`, `logs`, `restart`, and `stop`. Updates preserve `/etc/nord-dev/nord-dev.env` and `/var/lib/nord-dev/data`, and save a pre-update archive under `/var/backups/nord-dev/`. Configure HTTPS through a reverse proxy before exposing the service publicly; setting the public URL in setup does not itself provision TLS.
-
-For a manual local run, use Java 21 and Maven 3.9+:
+Update:
 
 ```bash
-mvn spring-boot:run
+sudo ./nord-forge-installer.run update
 ```
 
-Open `http://localhost:8080/setup` and finish the wizard. The default H2 database lives in `./data`; database settings can be overridden with `NORD_DB_URL`, `NORD_DB_USER`, and `NORD_DB_PASSWORD`.
+Status:
 
-## Platform areas
+```bash
+nord-forge status
+```
 
-- **Global Nord ID:** BCrypt password storage, first-user Platform Owner, and admin-managed accounts with role restrictions.
-- **Service studio:** Java CLI, HTTP service, background worker, Discord integration, FiveM resource, and NUI starter models. Each project generates an owner-scoped ZIP scaffold.
-- **Licensing:** admin-generated high-entropy keys; only SHA-256 digests are stored. `/api/licenses/verify` checks product, expiry, and activation allowance and binds a key to a stable installation ID.
-- **Updates:** admin release drafts for `stable` and `beta`, publish action, release history, and public JSON metadata feeds at `/api/updates/{channel}`.
-- **Docs:** in-app developer setup and integration notes.
+The first account registered becomes the protected Platform Owner.
 
-## Deployment notes
+## Ports
 
-Before public production use, configure HTTPS, PostgreSQL or another managed database, automated off-server backups, email verification and recovery, rate limiting, audit logs, external secret storage, and a security review. License activation persistence should use atomic transactional storage with a unique activation constraint before horizontal scaling. Update feeds publish metadata; signed binary artifacts, staged rollouts, and client updater execution are not implemented. Never put private license keys in FiveM client code or NUI assets; verify them from a trusted server-side resource.
+- Core/Web: `8088`
+- Administration: `8089` (should normally be exposed only through the intended reverse proxy / firewall policy)
+
+## Data
+
+Default persistent root: `/var/lib/nord-forge`.
+
+Release artifacts are stored under `/var/lib/nord-forge/storage/releases`. Database state is stored under `/var/lib/nord-forge/db`.
+
+## V1 capability map
+
+V2's domain model includes: accounts, Forge Keys, workspaces, members/RBAC, products, releases, entitlements, licenses and activations, one-use downloads, marketplace/store data, manual purchase conversations, support, documentation/pages, generic integrations (Tebex/Discord), infrastructure nodes, API keys, workspace audit and isolated platform administration.
+
+Source-protection is deliberately separated from authorization. V2 never pretends that UI hiding protects code: runtime licensing and protected-build work are independent concerns and can evolve without weakening download entitlement checks.

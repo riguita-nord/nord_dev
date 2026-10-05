@@ -1,0 +1,24 @@
+[Unit]
+Description=Nord Forge V2 Core
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nordforge
+Group=nordforge
+EnvironmentFile=/etc/nord-forge/nord.env
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=70 -jar /opt/nord-forge/bin/nord-forge-core.jar
+Restart=on-failure
+RestartSec=3
+WorkingDirectory=/var/lib/nord-forge
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/nord-forge
+CapabilityBoundingSet=
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
