@@ -55,6 +55,82 @@ public class AdminResource {
         return proxy("PUT","/api/v2/internal/admin/workspaces/"+wid+"/status","{\"status\":\""+status+"\"}");
     }
 
+    @GET @Path("/system/update")
+    public Response updateStatus(@CookieParam("NF_ADMIN_SESSION") String token){
+        sessions.require(token);
+        java.nio.file.Path control=java.nio.file.Path.of("/var/lib/nord-forge/control");
+        Map<String,Object> out=new LinkedHashMap<>();
+        out.put("ok",true);
+        out.put("version",readText(java.nio.file.Path.of("/opt/nord-forge/VERSION"),"unknown").trim());
+        out.put("queued",Files.exists(control.resolve("update.request")));
+        out.put("status",parseStatus(control.resolve("update.status")));
+        out.put("backups",listBackups());
+        return Response.ok(out).build();
+    }
+
+    @POST @Path("/system/update")
+    public Response requestUpdate(@CookieParam("NF_ADMIN_SESSION") String token){
+        sessions.require(token);
+        try{
+            java.nio.file.Path control=java.nio.file.Path.of("/var/lib/nord-forge/control");
+            Files.createDirectories(control);
+            java.nio.file.Path request=control.resolve("update.request");
+            if(Files.exists(request)) return Response.status(409).entity(Map.of("ok",false,"error","update_already_queued")).build();
+            Map<String,String> current=parseStatus(control.resolve("update.status"));
+            if("running".equals(current.get("state"))) return Response.status(409).entity(Map.of("ok",false,"error","update_running")).build();
+            Files.writeString(request,"requested_at="+Instant.now()+"\nrequested_by="+sessions.require(token).email()+"\n");
+            return Response.accepted(Map.of("ok",true,"state","queued")).build();
+        }catch(Exception e){
+            return Response.serverError().entity(Map.of("ok",false,"error","update_request_failed")).build();
+        }
+    }
+
+    @GET @Path("/system/update/log")
+    public Response updateLog(@CookieParam("NF_ADMIN_SESSION") String token){
+        sessions.require(token);
+        java.nio.file.Path log=java.nio.file.Path.of("/var/lib/nord-forge/control/update.log");
+        if(!Files.exists(log)) return Response.ok(Map.of("ok",true,"log","")).build();
+        try{
+            List<String> lines=Files.readAllLines(log,StandardCharsets.UTF_8);
+            int from=Math.max(0,lines.size()-250);
+            return Response.ok(Map.of("ok",true,"log",String.join("\n",lines.subList(from,lines.size())))).build();
+        }catch(Exception e){
+            return Response.serverError().entity(Map.of("ok",false,"error","update_log_unavailable")).build();
+        }
+    }
+
+    private List<Map<String,Object>> listBackups(){
+        java.nio.file.Path dir=java.nio.file.Path.of("/var/lib/nord-forge/backups");
+        if(!Files.isDirectory(dir)) return List.of();
+        try(var stream=Files.list(dir)){
+            return stream.filter(Files::isRegularFile).sorted(Comparator.comparingLong(this::modified).reversed()).limit(30).map(p->{
+                Map<String,Object> item=new LinkedHashMap<>();
+                item.put("name",p.getFileName().toString());
+                try{item.put("size",Files.size(p));item.put("modified_at",Files.getLastModifiedTime(p).toInstant().toString());}catch(Exception ignored){item.put("size",0L);}
+                return item;
+            }).toList();
+        }catch(Exception e){return List.of();}
+    }
+
+    private long modified(java.nio.file.Path p){
+        try{return Files.getLastModifiedTime(p).toMillis();}catch(Exception e){return 0L;}
+    }
+
+    private Map<String,String> parseStatus(java.nio.file.Path path){
+        Map<String,String> out=new LinkedHashMap<>();
+        if(!Files.exists(path)){out.put("state","idle");return out;}
+        try{
+            for(String line:Files.readAllLines(path,StandardCharsets.UTF_8)){
+                int i=line.indexOf('=');if(i>0)out.put(line.substring(0,i).trim(),line.substring(i+1).trim());
+            }
+        }catch(Exception e){out.put("state","unknown");}
+        return out;
+    }
+
+    private String readText(java.nio.file.Path path,String fallback){
+        try{return Files.readString(path,StandardCharsets.UTF_8);}catch(Exception e){return fallback;}
+    }
+
     private Response proxy(String method,String path,String body){
         try{
             HttpRequest.Builder rb=HttpRequest.newBuilder(URI.create(core+path)).timeout(Duration.ofSeconds(8)).header("X-Nord-Admin-Service",serviceSecret).header("Accept","application/json");
