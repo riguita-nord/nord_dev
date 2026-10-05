@@ -12,6 +12,7 @@ import java.util.Set;
     @Column(nullable=false) String role="USER";
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected Account(){} Account(String email,String hash,String role){this.email=email;this.passwordHash=hash;this.role=role;}
+    public Long getId(){return id;} public String getEmail(){return email;} public String getRole(){return role;} public Instant getCreatedAt(){return createdAt;}
 }
 @Entity @Table(name="nd_platform_settings") class PlatformSettings {
     @Id String id="global";
@@ -37,6 +38,7 @@ import java.util.Set;
     @ElementCollection(fetch=FetchType.EAGER) @CollectionTable(name="nd_license_servers",joinColumns=@JoinColumn(name="license_id"),uniqueConstraints=@UniqueConstraint(columnNames={"license_id","server_hash"})) @Column(name="server_hash",nullable=false) Set<String> activatedServers=new HashSet<>();
     protected License(){}
     License(String product,String owner,String hash,String prefix,int max,Instant expires){this.product=product;this.ownerEmail=owner;keyHash=hash;keyPrefix=prefix;maxActivations=max;expiresAt=expires;}
+    public Long getId(){return id;} public String getProduct(){return product;} public String getOwnerEmail(){return ownerEmail;} public String getStatus(){return status;} public int getActivations(){return activations;} public int getMaxActivations(){return maxActivations;} public Instant getExpiresAt(){return expiresAt;} public Instant getCreatedAt(){return createdAt;}
 }
 @Entity @Table(name="nd_services") class ServiceProject {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
@@ -46,6 +48,7 @@ import java.util.Set;
     @Column(nullable=false) String status="READY";
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected ServiceProject(){} ServiceProject(String name,String template,String owner){this.name=name;this.template=template;ownerEmail=owner;}
+    public Long getId(){return id;} public String getName(){return name;} public String getTemplate(){return template;} public String getOwnerEmail(){return ownerEmail;} public String getStatus(){return status;} public Instant getCreatedAt(){return createdAt;}
 }
 @Entity @Table(name="nd_releases") class Release {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
@@ -56,6 +59,7 @@ import java.util.Set;
     @Column(nullable=false) String status="DRAFT";
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected Release(){} Release(String version,String title,String notes,String channel){this.version=version;this.title=title;this.notes=notes;this.channel=channel;}
+    public Long getId(){return id;} public String getVersion(){return version;} public String getTitle(){return title;} public String getNotes(){return notes;} public String getChannel(){return channel;} public String getStatus(){return status;} public Instant getCreatedAt(){return createdAt;}
 }
 @Entity @Table(name="nd_workspaces") class Workspace {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
@@ -66,6 +70,7 @@ import java.util.Set;
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected Workspace(){}
     Workspace(String name,String area,String description,String ownerEmail){this.name=name;this.area=area;this.description=description;this.ownerEmail=ownerEmail;}
+    public Long getId(){return id;} public String getName(){return name;} public String getArea(){return area;} public String getDescription(){return description;} public String getOwnerEmail(){return ownerEmail;} public Instant getCreatedAt(){return createdAt;}
 }
 @Entity @Table(name="nd_workspace_messages") class WorkspaceMessage {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
@@ -76,4 +81,5 @@ import java.util.Set;
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected WorkspaceMessage(){}
     WorkspaceMessage(Long workspaceId,String channel,String authorEmail,String content){this.workspaceId=workspaceId;this.channel=channel;this.authorEmail=authorEmail;this.content=content;}
+    public Long getId(){return id;} public Long getWorkspaceId(){return workspaceId;} public String getChannel(){return channel;} public String getAuthorEmail(){return authorEmail;} public String getContent(){return content;} public Instant getCreatedAt(){return createdAt;}
 }
