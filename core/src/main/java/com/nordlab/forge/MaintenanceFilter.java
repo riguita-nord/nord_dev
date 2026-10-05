@@ -21,6 +21,7 @@ public class MaintenanceFilter implements ContainerRequestFilter {
         String path=request.getUriInfo().getPath();
         if(path==null) path="";
         if(path.startsWith("q/health") ||
+           path.startsWith("administration") ||
            path.equals("health") ||
            path.startsWith("api/v2/internal/admin/") ||
            path.equals("api/v2/admin/launch") ||
