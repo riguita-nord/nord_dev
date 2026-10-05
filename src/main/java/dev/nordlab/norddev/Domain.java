@@ -57,3 +57,23 @@ import java.util.Set;
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected Release(){} Release(String version,String title,String notes,String channel){this.version=version;this.title=title;this.notes=notes;this.channel=channel;}
 }
+@Entity @Table(name="nd_workspaces") class Workspace {
+    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
+    @Column(nullable=false) String name;
+    @Column(nullable=false) String area="DEVELOPER";
+    @Column(length=500) String description="";
+    @Column(nullable=false) String ownerEmail;
+    @Column(nullable=false) Instant createdAt=Instant.now();
+    protected Workspace(){}
+    Workspace(String name,String area,String description,String ownerEmail){this.name=name;this.area=area;this.description=description;this.ownerEmail=ownerEmail;}
+}
+@Entity @Table(name="nd_workspace_messages") class WorkspaceMessage {
+    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
+    @Column(nullable=false) Long workspaceId;
+    @Column(nullable=false) String channel;
+    @Column(nullable=false) String authorEmail;
+    @Column(nullable=false,length=2000) String content;
+    @Column(nullable=false) Instant createdAt=Instant.now();
+    protected WorkspaceMessage(){}
+    WorkspaceMessage(Long workspaceId,String channel,String authorEmail,String content){this.workspaceId=workspaceId;this.channel=channel;this.authorEmail=authorEmail;this.content=content;}
+}
