@@ -11,3 +11,17 @@
 @media(max-width:1050px){:root{--sidebar:196px;--dock:52px}.rail{left:var(--dock);width:var(--sidebar)}.app-frame{margin-left:calc(var(--dock) + var(--sidebar))}}
 @media(max-width:700px){:root{--sidebar:54px;--dock:0px}.app-dock{display:none}.rail{left:0;width:var(--sidebar);padding:14px 6px}.rail .brand{justify-content:center;margin-bottom:20px}.rail .brand-word,.rail .rail-label,.rail .nav-link b,.rail .rail-bottom .status-text,.rail .account-name,.rail .more{display:none}.rail .nav-link{justify-content:center;padding:0}.rail .nav-link>span{width:auto}.rail-bottom{display:block;margin-top:auto;padding:10px 0 0}.rail-bottom .status-dot{display:none}.rail-bottom form{display:block}.account-button{justify-content:center;padding:8px 0}.app-frame{margin-left:var(--sidebar)}}
 .rail-bottom-links{margin-top:11px;padding-top:9px;border-top:1px solid var(--border)}.rail-bottom-links .nav-link{margin:2px 0}.rail-bottom-links .nav-link b{font-size:11px}
+/* Forge-inspired workspace switcher: persistent app rail, per-workspace shortcuts, contextual home. */
+.dock-workspace{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:12px;background:#151a22;border:1px solid #252c37;color:#c4cfbc;font:700 12px Manrope,sans-serif;transition:.15s}
+.dock-workspace:hover,.dock-workspace.workspace-current{border-color:#536642;background:#202a1d;color:var(--green);border-radius:10px}
+.dock-spacer{flex:1}
+.rail-bottom-links .nav-link{height:36px}
+@media(max-width:700px){
+ :root{--dock:0px}
+ .app-dock{display:flex;inset:auto 0 0 0;width:100%;height:54px;flex-direction:row;justify-content:center;gap:8px;padding:7px 12px;border-right:0;border-top:1px solid var(--border)}
+ .dock-mark,.dock-app,.dock-add,.dock-workspace{width:36px;height:36px}
+ .dock-separator{height:26px;width:1px;margin:0 2px}
+ .dock-spacer{flex:1}
+ .app-frame{margin-left:var(--sidebar);padding-bottom:54px}
+ .app-dock .dock-workspace:nth-of-type(n+6){display:none}
+}
