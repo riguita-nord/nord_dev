@@ -3,7 +3,7 @@
   <a href="/app" class="dock-mark" title="Nord Dev">N</a>
   <span class="dock-separator"></span>
   <a href="/workspaces" class="dock-app" th:classappend="${active != 'client-home'} ? ' selected'" title="Developer workspaces">DV</a>
-  <a th:each="w : ${dockWorkspaces}" th:href="@{/workspaces(workspace=${w.id})}" class="dock-workspace" th:classappend="${active == 'workspaces' and currentWorkspace != null and currentWorkspace.id == w.id} ? ' workspace-current'" th:title="${w.name}" th:text="${#strings.substring(w.name,0,1).toUpperCase()}">W</a>
+  <a th:each="w : ${dockWorkspaces}" th:href="@{/workspaces(workspace=${w['id']})}" class="dock-workspace" th:classappend="${active == 'workspaces' and currentWorkspaceId != null and currentWorkspaceId == w['id']} ? ' workspace-current'" th:title="${w['name']}" th:text="${#strings.substring(w['name'],0,1).toUpperCase()}">W</a>
   <a href="/workspaces?new=1" class="dock-add" title="Criar workspace">+</a>
   <span class="dock-spacer"></span>
   <a href="/client-area" class="dock-app dock-home" th:classappend="${active == 'client-home'} ? ' selected'" title="Casa · área do cliente">⌂</a>
