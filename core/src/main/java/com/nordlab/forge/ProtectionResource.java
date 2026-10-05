@@ -7,7 +7,7 @@ import jakarta.ws.rs.core.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;\nimport java.nio.file.NoSuchFileException;\nimport java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -79,7 +79,7 @@ public class ProtectionResource {
         byte[] bytes; try{bytes=Base64.getDecoder().decode(payload);}catch(Exception e){throw new BadRequestException("invalid_module_payload");}
         if(bytes.length==0||bytes.length>10*1024*1024) throw new BadRequestException("module_too_large");
         String sha=security.sha256(Base64.getEncoder().encodeToString(bytes)), file=security.sha256(module).substring(0,24)+"-"+security.sha256(version).substring(0,12)+".module";
-        Path root=Path.of(dataRoot,"storage","protection-modules",build),path=root.resolve(file);
+        java.nio.file.Path root=java.nio.file.Path.of(dataRoot,"storage","protection-modules",build),path=root.resolve(file);
         try{Files.createDirectories(root);Files.write(path,bytes,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING);}catch(Exception e){throw new IllegalStateException("module_storage_failed",e);}
         String sig=security.hmac(protectionSecret,build+"|"+module+"|"+version+"|"+sha+"|"+bytes.length);
         Map<String,Object> old=db.one("SELECT id FROM protection_modules WHERE build_id=? AND module_id=? AND version=?",build,module,version);
@@ -180,7 +180,7 @@ public class ProtectionResource {
         Timestamp expires=(Timestamp)s.get("expires_at"); if(expires.toInstant().isBefore(Instant.now())) throw new ForbiddenException("protection_session_expired");
         Map<String,Object> m=db.one("SELECT * FROM protection_modules WHERE build_id=? AND module_id=? AND version=? AND streamed=TRUE",s.get("build_id"),module,version); if(m==null) throw new NotFoundException("protection_module_not_found");
         try{
-            byte[] bytes=Files.readAllBytes(Path.of(String.valueOf(m.get("storage_path")))); String sha=security.sha256(Base64.getEncoder().encodeToString(bytes)); if(!MessageDigest.isEqual(sha.getBytes(StandardCharsets.UTF_8),String.valueOf(m.get("sha256")).getBytes(StandardCharsets.UTF_8))) throw new ForbiddenException("protection_module_integrity_failed");
+            byte[] bytes=Files.readAllBytes(java.nio.file.Path.of(String.valueOf(m.get("storage_path")))); String sha=security.sha256(Base64.getEncoder().encodeToString(bytes)); if(!MessageDigest.isEqual(sha.getBytes(StandardCharsets.UTF_8),String.valueOf(m.get("sha256")).getBytes(StandardCharsets.UTF_8))) throw new ForbiddenException("protection_module_integrity_failed");
             return Response.ok(Map.of("ok",true,"module_id",module,"version",version,"build_id",s.get("build_id"),"sha256",sha,"signature",String.valueOf(m.get("signature")),"payload",Base64.getEncoder().encodeToString(bytes))).build();
         }catch(NoSuchFileException e){throw new NotFoundException("protection_module_missing");}catch(Exception e){if(e instanceof WebApplicationException w)throw w;throw new IllegalStateException("module_read_failed",e);}
     }
