@@ -5,7 +5,9 @@ import jakarta.ws.rs.core.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
-import java.net.http.HttpClient;\nimport java.net.http.HttpRequest;\nimport java.net.http.HttpResponse;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 
