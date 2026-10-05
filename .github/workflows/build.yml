@@ -13,5 +13,10 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+      - name: Check frontend syntax
+        run: |
+          node --check core/src/main/resources/META-INF/resources/assets/app.js
+          node --check core/src/main/resources/META-INF/resources/assets/store.js
+          node --check admin-service/src/main/resources/META-INF/resources/admin.js
       - name: Verify
         run: mvn -B verify
