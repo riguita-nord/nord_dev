@@ -18,6 +18,7 @@ jobs:
           bash -n install.sh
           bash -n nord-forge-installer.run
           bash -n scripts/nord-forge
+          bash -n scripts/nord-forge-update-worker
       - name: Check frontend syntax
         run: |
           node --check core/src/main/resources/META-INF/resources/assets/app.js
