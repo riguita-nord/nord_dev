@@ -16,7 +16,4 @@ server:
   error:
     include-message: never
 nord:
-  bootstrap:
-    admin-email: ${NORD_ADMIN_EMAIL:}
-    admin-password: ${NORD_ADMIN_PASSWORD:}
   app-url: ${NORD_APP_URL:http://localhost:8080}

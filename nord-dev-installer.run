@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+REPO="https://github.com/riguita-nord/nord_dev.git"
+BRANCH="main"
+APP_DIR="/opt/nord-dev"
+STATE_DIR="/var/lib/nord-dev"
+CONFIG_DIR="/etc/nord-dev"
+BACKUP_DIR="/var/backups/nord-dev"
+SERVICE="nord-dev"
+
+usage(){ echo "Usage: sudo $0 install|update|status|logs|restart|stop"; }
+need_root(){ [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "Run install/update with sudo." >&2; exit 1; }; }
+install_app(){
+  need_root
+  command -v apt-get >/dev/null || { echo "This installer supports Debian/Ubuntu (apt)." >&2; exit 1; }
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update
+  apt-get install -y openjdk-21-jdk-headless maven git ca-certificates curl
+  java -version 2>&1 | grep -Eq ' version "(2[1-9]|[3-9][0-9])\.' || { echo "Java 21 or newer is required." >&2; exit 1; }
+  id norddev >/dev/null 2>&1 || useradd --system --home-dir "$STATE_DIR" --shell /usr/sbin/nologin norddev
+  install -d -o norddev -g norddev "$STATE_DIR/data" "$STATE_DIR/work"
+  install -d -o root -g norddev -m 0750 "$APP_DIR" "$CONFIG_DIR" "$BACKUP_DIR"
+  if [[ ! -f "$CONFIG_DIR/nord-dev.env" ]]; then
+    umask 027
+    cat > "$CONFIG_DIR/nord-dev.env" <<ENV
+SERVER_PORT=8080
+SPRING_DATASOURCE_URL=jdbc:h2:file:$STATE_DIR/data/norddev;AUTO_SERVER=TRUE
+SPRING_DATASOURCE_USERNAME=sa
+SPRING_DATASOURCE_PASSWORD=
+ENV
+    chown root:norddev "$CONFIG_DIR/nord-dev.env"; chmod 0640 "$CONFIG_DIR/nord-dev.env"
+  fi
+  local work="$STATE_DIR/work/build"
+  rm -rf "$work"; install -d -o norddev -g norddev "$work"
+  git clone --depth 1 --branch "$BRANCH" "$REPO" "$work/source"
+  chown -R norddev:norddev "$work"
+  runuser -u norddev -- bash -lc "cd '$work/source' && mvn --batch-mode --no-transfer-progress clean verify"
+  local jar="$work/source/target/nord-dev-0.1.0.jar"
+  [[ -f "$jar" ]] || { echo "Build did not produce expected JAR: $jar" >&2; exit 1; }
+  if [[ -f "$APP_DIR/nord-dev.jar" ]]; then
+    local stamp; stamp=$(date -u +%Y%m%dT%H%M%SZ)
+    tar -czf "$BACKUP_DIR/pre-update-$stamp.tar.gz" "$CONFIG_DIR" "$STATE_DIR/data" "$APP_DIR/nord-dev.jar"
+    cp "$APP_DIR/nord-dev.jar" "$APP_DIR/nord-dev.jar.previous"
+  fi
+  install -o root -g norddev -m 0640 "$jar" "$APP_DIR/nord-dev.jar.new"
+  mv "$APP_DIR/nord-dev.jar.new" "$APP_DIR/nord-dev.jar"
+  cat > "/etc/systemd/system/$SERVICE.service" <<UNIT
+[Unit]
+Description=Nord Dev platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=norddev
+Group=norddev
+WorkingDirectory=$STATE_DIR
+EnvironmentFile=$CONFIG_DIR/nord-dev.env
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=70 -jar $APP_DIR/nord-dev.jar
+Restart=on-failure
+RestartSec=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=$STATE_DIR
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable "$SERVICE"
+  systemctl restart "$SERVICE"
+  if ! systemctl is-active --quiet "$SERVICE"; then
+    if [[ -f "$APP_DIR/nord-dev.jar.previous" ]]; then cp "$APP_DIR/nord-dev.jar.previous" "$APP_DIR/nord-dev.jar"; systemctl restart "$SERVICE" || true; fi
+    journalctl -u "$SERVICE" -n 80 --no-pager >&2
+    exit 1
+  fi
+  echo "Nord Dev is running. Open http://<server-ip>:8080/setup to create the first Platform Owner."
+  echo "Configuration: $CONFIG_DIR/nord-dev.env | Data: $STATE_DIR/data | Backups: $BACKUP_DIR"
+}
+case "${1:-}" in
+  install|update) install_app "$1" ;;
+  status) systemctl status "$SERVICE" --no-pager ;;
+  logs) journalctl -u "$SERVICE" -f ;;
+  restart|stop) need_root; systemctl "$1" "$SERVICE" ;;
+  *) usage; exit 2 ;;
+esac

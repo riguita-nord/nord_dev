@@ -12,8 +12,8 @@ public class SecurityConfig {
     @Bean PasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(12); }
     @Bean SecurityFilterChain security(HttpSecurity http) throws Exception {
         return http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/licenses/verify"))
-            .authorizeHttpRequests(a -> a.requestMatchers("/", "/login", "/register", "/css/**", "/js/**", "/api/licenses/verify", "/api/updates/**").permitAll()
-                .requestMatchers("/admin/**").hasRole("ADMIN").anyRequest().authenticated())
+            .authorizeHttpRequests(a -> a.requestMatchers("/", "/login", "/register", "/setup", "/setup/**", "/css/**", "/js/**", "/api/licenses/verify", "/api/updates/**").permitAll()
+                .requestMatchers("/admin/**").hasAnyRole("ADMIN", "OWNER").anyRequest().authenticated())
             .formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/app", true).permitAll())
             .logout(l -> l.logoutSuccessUrl("/login?logout"))
             .sessionManagement(s -> s.sessionFixation(f -> f.migrateSession()).maximumSessions(3))

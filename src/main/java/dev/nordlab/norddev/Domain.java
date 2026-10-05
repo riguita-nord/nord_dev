@@ -13,6 +13,16 @@ import java.util.Set;
     @Column(nullable=false) Instant createdAt=Instant.now();
     protected Account(){} Account(String email,String hash,String role){this.email=email;this.passwordHash=hash;this.role=role;}
 }
+@Entity @Table(name="nd_platform_settings") class PlatformSettings {
+    @Id String id="global";
+    @Column(nullable=false) String name="Nord Dev";
+    @Column(nullable=false) String publicUrl="";
+    @Column(nullable=false) String timezone="Europe/Lisbon";
+    @Column(nullable=false) boolean setupComplete=false;
+    Long ownerId;
+    Instant configuredAt;
+    protected PlatformSettings(){}
+}
 @Entity @Table(name="nd_licenses") class License {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) Long id;
     @Column(nullable=false) String product;
