@@ -27,7 +27,7 @@ install_deps(){
 
 ensure_user(){
   id nordforge >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin nordforge
-  mkdir -p "$ROOT" "$ETC" "$DATA/db" "$DATA/storage/releases" "$DATA/storage/protection-modules" "$BACKUPS"
+  mkdir -p "$ROOT" "$ETC" "$DATA/db" "$DATA/storage/releases" "$DATA/storage/protection-modules" "$DATA/control" "$BACKUPS"
   chown -R nordforge:nordforge "$DATA"
 }
 
@@ -96,11 +96,16 @@ install_files(){
   install -m 0755 "admin-service/target/nord-forge-admin-$VERSION-runner.jar" "$ROOT/bin/nord-forge-admin.jar"
   printf '%s\n' "$VERSION" > "$ROOT/VERSION"
   install -m 0755 scripts/nord-forge /usr/local/bin/nord-forge
+  install -m 0755 -d /usr/local/libexec
+  install -m 0755 scripts/nord-forge-update-worker /usr/local/libexec/nord-forge-update-worker
   install -m 0755 nord-forge-installer.run "$ROOT/nord-forge-installer.run"
   install -m 0755 install.sh "$ROOT/install.sh"
   install -m 0644 deploy/nord-forge.service /etc/systemd/system/nord-forge.service
   install -m 0644 deploy/nord-forge-admin.service /etc/systemd/system/nord-forge-admin.service
+  install -m 0644 deploy/nord-forge-update.service /etc/systemd/system/nord-forge-update.service
+  install -m 0644 deploy/nord-forge-update.path /etc/systemd/system/nord-forge-update.path
   systemctl daemon-reload
+  systemctl enable --now nord-forge-update.path >/dev/null 2>&1 || true
 }
 
 health_check(){
@@ -177,7 +182,8 @@ case "$ACTION" in
   uninstall)
     stop_services
     systemctl disable nord-forge.service nord-forge-admin.service >/dev/null 2>&1 || true
-    rm -f /etc/systemd/system/nord-forge.service /etc/systemd/system/nord-forge-admin.service /usr/local/bin/nord-forge
+    systemctl disable --now nord-forge-update.path 2>/dev/null || true
+    rm -f /etc/systemd/system/nord-forge.service /etc/systemd/system/nord-forge-admin.service /etc/systemd/system/nord-forge-update.service /etc/systemd/system/nord-forge-update.path /usr/local/bin/nord-forge /usr/local/libexec/nord-forge-update-worker
     systemctl daemon-reload
     log "Services removed. Persistent data remains at $DATA."
     ;;
