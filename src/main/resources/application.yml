@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: Nord Dev
+  datasource:
+    url: ${NORD_DB_URL:jdbc:h2:file:./data/norddev;AUTO_SERVER=TRUE}
+    username: ${NORD_DB_USER:sa}
+    password: ${NORD_DB_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+  thymeleaf:
+    cache: false
+server:
+  port: ${PORT:8080}
+  error:
+    include-message: never
+nord:
+  bootstrap:
+    admin-email: ${NORD_ADMIN_EMAIL:}
+    admin-password: ${NORD_ADMIN_PASSWORD:}
+  app-url: ${NORD_APP_URL:http://localhost:8080}
