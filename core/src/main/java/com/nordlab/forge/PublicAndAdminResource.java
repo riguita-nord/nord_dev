@@ -97,5 +97,45 @@ public class PublicAndAdminResource {
         return Response.ok(Map.of("ok",true,"enabled",Boolean.parseBoolean(value))).build();
     }
 
+
+    @PUT @Path("api/v2/internal/admin/users/{uid}/status")
+    @Consumes(MediaType.APPLICATION_JSON) @Produces(MediaType.APPLICATION_JSON)
+    public Response userStatus(@PathParam("uid") long uid,@HeaderParam("X-Nord-Admin-Service") String secret,Map<String,Object> b){
+        internal(secret); Map<String,Object> u=db.one("SELECT id,platform_owner,status FROM users WHERE id=?",uid); if(u==null) throw new NotFoundException("user_not_found");
+        if(Boolean.TRUE.equals(u.get("platform_owner"))) throw new BadRequestException("platform_owner_protected");
+        String status=String.valueOf(b.getOrDefault("status","active")); if(!Set.of("active","suspended").contains(status)) throw new BadRequestException("invalid_status");
+        db.execute("UPDATE users SET status=? WHERE id=?",status,uid);
+        if("suspended".equals(status)) db.execute("DELETE FROM sessions WHERE user_id=?",uid);
+        return Response.ok(Map.of("ok",true,"status",status)).build();
+    }
+
+    @PUT @Path("api/v2/internal/admin/workspaces/{wid}/status")
+    @Consumes(MediaType.APPLICATION_JSON) @Produces(MediaType.APPLICATION_JSON)
+    public Response workspaceStatus(@PathParam("wid") long wid,@HeaderParam("X-Nord-Admin-Service") String secret,Map<String,Object> b){
+        internal(secret); if(db.count("SELECT COUNT(*) FROM workspaces WHERE id=?",wid)==0) throw new NotFoundException("workspace_not_found");
+        String status=String.valueOf(b.getOrDefault("status","active")); if(!Set.of("active","suspended","archived").contains(status)) throw new BadRequestException("invalid_status");
+        db.execute("UPDATE workspaces SET status=? WHERE id=?",status,wid);
+        return Response.ok(Map.of("ok",true,"status",status)).build();
+    }
+
+    @GET @Path("api/v2/internal/admin/audit")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response platformAudit(@HeaderParam("X-Nord-Admin-Service") String secret){
+        internal(secret);
+        return Response.ok(db.query("SELECT ae.*,u.email,u.display_name,w.name workspace_name FROM audit_events ae LEFT JOIN users u ON u.id=ae.user_id LEFT JOIN workspaces w ON w.id=ae.workspace_id ORDER BY ae.created_at DESC LIMIT 500")).build();
+    }
+
+    @GET @Path("api/v2/internal/admin/runtime")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response runtime(@HeaderParam("X-Nord-Admin-Service") String secret){
+        internal(secret);
+        Runtime rt=Runtime.getRuntime();
+        return Response.ok(Map.of(
+          "ok",true,"version","2.0.0","java",System.getProperty("java.version"),
+          "processors",rt.availableProcessors(),"memory_max",rt.maxMemory(),"memory_total",rt.totalMemory(),"memory_free",rt.freeMemory(),
+          "maintenance",Boolean.parseBoolean(setting("maintenance","false"))
+        )).build();
+    }
+
     private String setting(String key,String fallback){ Map<String,Object> s=db.one("SELECT setting_value FROM platform_settings WHERE setting_key=?",key); return s==null?fallback:String.valueOf(s.get("setting_value")); }
 }
