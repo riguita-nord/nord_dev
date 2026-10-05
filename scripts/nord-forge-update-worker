@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 027
+
+CONTROL="/var/lib/nord-forge/control"
+REQUEST="$CONTROL/update.request"
+STATUS="$CONTROL/update.status"
+LOG="$CONTROL/update.log"
+INSTALLER="/opt/nord-forge/nord-forge-installer.run"
+
+mkdir -p "$CONTROL"
+rm -f "$REQUEST"
+
+stamp(){ date --iso-8601=seconds; }
+status(){
+  local state="$1" message="$2"
+  printf 'state=%s\nmessage=%s\nupdated_at=%s\n' "$state" "$message" "$(stamp)" > "$STATUS"
+  chmod 0640 "$STATUS"
+  chown root:nordforge "$STATUS" 2>/dev/null || true
+}
+
+exec 9>/run/nord-forge-update-worker.lock
+if ! flock -n 9; then
+  status busy "Another update transaction is already running."
+  exit 0
+fi
+
+status running "Resolving and installing the latest trusted Nord Forge release."
+: > "$LOG"
+chmod 0640 "$LOG"
+chown root:nordforge "$LOG" 2>/dev/null || true
+
+if "$INSTALLER" update >>"$LOG" 2>&1; then
+  version="$(cat /opt/nord-forge/VERSION 2>/dev/null || echo unknown)"
+  status success "Nord Forge updated successfully to v$version."
+  exit 0
+fi
+
+status failed "The update transaction failed. The installer attempted automatic rollback."
+exit 1
