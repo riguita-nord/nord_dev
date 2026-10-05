@@ -21,12 +21,18 @@ import java.util.zip.*;
 
 @Controller
 class NordDevController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(NordDevController.class);
     private final AccountRepository users; private final LicenseRepository licenses; private final ServiceProjectRepository projects; private final ReleaseRepository releases; private final PasswordEncoder encoder; private final PlatformSettingsRepository settings; private final PlatformSetupService setup; private final WorkspaceRepository workspaces; private final WorkspaceMessageRepository workspaceMessages;
     NordDevController(AccountRepository users,LicenseRepository licenses,ServiceProjectRepository projects,ReleaseRepository releases,PasswordEncoder encoder,PlatformSettingsRepository settings,PlatformSetupService setup,WorkspaceRepository workspaces,WorkspaceMessageRepository workspaceMessages){this.users=users;this.licenses=licenses;this.projects=projects;this.releases=releases;this.encoder=encoder;this.settings=settings;this.setup=setup;this.workspaces=workspaces;this.workspaceMessages=workspaceMessages;}
     @org.springframework.context.annotation.Bean UserDetailsService userDetailsService(){return email->users.findByEmailIgnoreCase(email).map(a->User.withUsername(a.email).password(a.passwordHash).roles(a.role).build()).orElseThrow(()->new UsernameNotFoundException("Account not found"));}
     @ModelAttribute void shellNavigation(Model model, Authentication auth){
         if(auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
-            model.addAttribute("dockWorkspaces", workspaces.findAllByOwnerEmailIgnoreCaseAndAreaOrderByCreatedAtDesc(auth.getName(), "DEVELOPER"));
+            try {
+                model.addAttribute("dockWorkspaces", workspaces.findAllByOwnerEmailIgnoreCaseAndAreaOrderByCreatedAtDesc(auth.getName(), "DEVELOPER"));
+            } catch (RuntimeException ex) {
+                log.warn("Could not load workspace shortcuts for {}", auth.getName(), ex);
+                model.addAttribute("dockWorkspaces", List.of());
+            }
             model.addAttribute("canAdmin", isAdmin(auth));
         } else {
             model.addAttribute("dockWorkspaces", List.of());
