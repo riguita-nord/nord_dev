@@ -13,6 +13,11 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+      - name: Check scripts
+        run: |
+          bash -n install.sh
+          bash -n nord-forge-installer.run
+          bash -n scripts/nord-forge
       - name: Check frontend syntax
         run: |
           node --check core/src/main/resources/META-INF/resources/assets/app.js
