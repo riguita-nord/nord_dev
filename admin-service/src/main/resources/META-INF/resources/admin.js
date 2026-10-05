@@ -1,6 +1,6 @@
 const app=document.querySelector('#app');let state={me:null,view:'overview'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-async function api(path,opt={}){const r=await fetch('/api'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});if(!r.ok)throw new Error(await r.text());return r.json()}
+async function api(path,opt={}){const r=await fetch('./api'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});if(!r.ok)throw new Error(await r.text());return r.json()}
 async function bootstrap(){const token=new URLSearchParams(location.search).get('token');if(token){try{await api('/session',{method:'POST',body:JSON.stringify({token})});history.replaceState({},'',location.pathname)}catch(e){return login('The administration handoff is invalid or expired.')}}try{state.me=await api('/me');render();loadView()}catch(e){login('Open Administration from the Nord Forge Platform Owner button.')}} 
 function login(msg){app.innerHTML=`<div class="login"><div class="login-card"><div class="mark">N</div><h1>Forge Administration</h1><p>${esc(msg)}</p></div></div>`}
 function render(){app.innerHTML=`<div class="shell"><aside class="side"><div class="brand"><div class="mark">N</div><div>Nord Forge<small>Administration</small></div></div><div class="nav">
