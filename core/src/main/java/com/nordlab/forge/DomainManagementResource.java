@@ -226,25 +226,49 @@ public class DomainManagementResource {
 
     @DELETE @Path("/products/{pid}")
     public Response deleteProduct(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
-        unsafe(session,csrf); long actor=uid(session); Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found");
-        long wid=((Number)p.get("workspace_id")).longValue(); forge.requireWorkspace(actor,wid,"admin");
-        for(Map<String,Object> r:db.query("SELECT storage_path FROM releases WHERE product_id=?",pid)) storage.delete(String.valueOf(r.get("storage_path")));
-        db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
-        db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
-        db.execute("DELETE FROM protection_installations WHERE product_id=?",pid);
-        db.execute("DELETE FROM protection_builds WHERE product_id=?",pid);
-        db.execute("DELETE FROM product_protection WHERE product_id=?",pid);
-        db.execute("DELETE FROM license_logs WHERE product_id=?",pid);
-        db.execute("DELETE FROM license_activations WHERE license_id IN(SELECT id FROM licenses WHERE product_id=?)",pid);
-        db.execute("DELETE FROM licenses WHERE product_id=?",pid);
-        db.execute("DELETE FROM entitlements WHERE product_id=?",pid);
-        db.execute("DELETE FROM purchase_messages WHERE thread_id IN(SELECT id FROM purchase_threads WHERE product_id=?)",pid);
-        db.execute("DELETE FROM purchase_threads WHERE product_id=?",pid);
-        db.execute("UPDATE support_tickets SET product_id=NULL WHERE product_id=?",pid);
-        db.execute("DELETE FROM releases WHERE product_id=?",pid);
-        db.execute("DELETE FROM products WHERE id=?",pid);
-        forge.audit(wid,actor,"product.deleted",String.valueOf(pid),String.valueOf(p.get("name")));
-        return Response.ok(Map.of("ok",true)).build();
+        unsafe(session,csrf);
+        long actor=uid(session);
+        Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid);
+        if(p==null) throw new NotFoundException("product_not_found");
+
+        long wid=((Number)p.get("workspace_id")).longValue();
+        forge.requireWorkspace(actor,wid,"developer","admin");
+
+        List<Map<String,Object>> releases=db.query("SELECT id,storage_path FROM releases WHERE product_id=?",pid);
+        try{
+            db.execute("DELETE FROM download_tokens WHERE release_id IN(SELECT id FROM releases WHERE product_id=?)",pid);
+
+            db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
+            db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
+            db.execute("DELETE FROM protection_installations WHERE product_id=?",pid);
+            db.execute("DELETE FROM protection_builds WHERE product_id=?",pid);
+            db.execute("DELETE FROM product_protection WHERE product_id=?",pid);
+
+            db.execute("DELETE FROM license_activations WHERE license_id IN(SELECT id FROM licenses WHERE product_id=?)",pid);
+            db.execute("DELETE FROM license_logs WHERE product_id=?",pid);
+            db.execute("DELETE FROM licenses WHERE product_id=?",pid);
+            db.execute("DELETE FROM entitlements WHERE product_id=?",pid);
+
+            db.execute("DELETE FROM purchase_messages WHERE thread_id IN(SELECT id FROM purchase_threads WHERE product_id=?)",pid);
+            db.execute("DELETE FROM purchase_threads WHERE product_id=?",pid);
+            db.execute("UPDATE support_tickets SET product_id=NULL WHERE product_id=?",pid);
+
+            db.execute("DELETE FROM releases WHERE product_id=?",pid);
+            int deleted=db.execute("DELETE FROM products WHERE id=?",pid);
+            if(deleted==0) throw new IllegalStateException("product_delete_failed");
+
+            for(Map<String,Object> r:releases){
+                Object storagePath=r.get("storage_path");
+                if(storagePath!=null) storage.delete(String.valueOf(storagePath));
+            }
+
+            forge.audit(wid,actor,"product.deleted",String.valueOf(pid),String.valueOf(p.get("name")));
+            return Response.ok(Map.of("ok",true,"deleted_product_id",pid)).build();
+        }catch(WebApplicationException e){
+            throw e;
+        }catch(Exception e){
+            throw new InternalServerErrorException("product_delete_failed: "+e.getMessage(),e);
+        }
     }
 
 
