@@ -3308,3 +3308,52 @@
     max-width:160px;
   }
 }
+
+/* NUI preview canvas: render at game viewport size, fit inside visible builder area */
+.nui-builder-preview-area{
+  display:block!important;
+  padding:10px!important;
+}
+.nui-preview-stage{
+  position:relative;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  display:flex!important;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden!important;
+  background:
+    linear-gradient(45deg,color-mix(in srgb,var(--line) 55%,transparent) 25%,transparent 25%,transparent 75%,color-mix(in srgb,var(--line) 55%,transparent) 75%),
+    linear-gradient(45deg,color-mix(in srgb,var(--line) 55%,transparent) 25%,transparent 25%,transparent 75%,color-mix(in srgb,var(--line) 55%,transparent) 75%),
+    #0b0f16!important;
+  background-position:0 0,8px 8px!important;
+  background-size:16px 16px!important;
+}
+.nui-preview-canvas{
+  flex:0 0 auto;
+  position:relative;
+  overflow:hidden;
+  border-radius:10px;
+  background:transparent;
+  box-shadow:0 16px 50px rgba(0,0,0,.38);
+  transition:transform .18s ease,width .18s ease,height .18s ease;
+}
+.nui-preview-canvas iframe{
+  position:absolute;
+  inset:0;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  border:0;
+  background:transparent;
+}
+.nui-preview-stage.desktop,
+.nui-preview-stage.tablet,
+.nui-preview-stage.mobile{
+  width:100%!important;
+  max-width:none!important;
+  height:100%!important;
+  max-height:none!important;
+  border-radius:0!important;
+}
