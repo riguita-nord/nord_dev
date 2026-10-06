@@ -2508,3 +2508,96 @@
     offset-path:path("M 5 68 Q 165 4 325 68")!important;
   }
 }
+
+/* Product catalog card grid */
+.product-catalog-grid{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:14px!important;
+  align-items:stretch;
+}
+.product-catalog-card{
+  min-height:250px!important;
+  padding:16px!important;
+  border-radius:16px!important;
+  background:var(--panel)!important;
+}
+.product-card-body{
+  min-height:82px;
+}
+.product-catalog-card h3{
+  margin:14px 0 6px!important;
+  font-size:18px!important;
+}
+.product-catalog-card>p,
+.product-card-body>p{
+  margin:0;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.55;
+}
+.product-card-meta{
+  display:grid!important;
+  gap:7px!important;
+  margin-top:14px!important;
+  padding-top:13px;
+  border-top:1px solid var(--line);
+}
+.product-card-meta span{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+  font-size:9px;
+  text-transform:capitalize;
+}
+.product-card-meta i{
+  width:13px;
+  color:var(--brand2);
+}
+.product-card-foot{
+  margin-top:auto!important;
+  padding-top:16px!important;
+  border-top:1px solid var(--line);
+}
+.product-card-price span{
+  display:block;
+  color:var(--muted);
+  font-size:8px;
+  font-weight:900;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.product-card-price strong{
+  display:block;
+  margin-top:3px;
+  font-size:15px;
+}
+.product-card-actions .btn{
+  min-height:36px;
+}
+.product-card-icon{
+  width:44px!important;
+  height:44px!important;
+  border-radius:13px!important;
+  font-size:16px;
+}
+.product-catalog-card:hover{
+  transform:translateY(-3px)!important;
+}
+.product-catalog-card.category-scripts .product-card-icon{color:var(--brand2)}
+.product-catalog-card.category-mlos .product-card-icon{color:var(--brand2)}
+.product-catalog-card.category-components .product-card-icon{color:var(--brand2)}
+.product-catalog-card.category-bots .product-card-icon{color:var(--brand2)}
+.product-catalog-card.category-other .product-card-icon{color:var(--brand2)}
+
+@media(max-width:1180px){
+  .product-catalog-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+}
+@media(max-width:760px){
+  .product-catalog-grid{
+    grid-template-columns:1fr!important;
+  }
+}
