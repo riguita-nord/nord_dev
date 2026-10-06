@@ -792,13 +792,20 @@ async function initNuiBuilder(p){
       const roots=[...document.querySelectorAll('[data-nord-interface]')];
       const selectedRoot=selected==='all'?null:roots.find(el=>el.getAttribute('data-nord-interface')===selected);
 
+      const setImportantIfNeeded=(el,name,value)=>{
+        if(el.style.getPropertyValue(name)!==value||el.style.getPropertyPriority(name)!=='important'){
+          el.style.setProperty(name,value,'important');
+        }
+      };
       const forceVisible=el=>{
         if(!el||el===document.body||el===document.documentElement)return;
-        el.style.setProperty('display','block','important');
-        el.style.setProperty('visibility','visible','important');
-        el.style.setProperty('opacity','1','important');
-        el.hidden=false;
-        el.classList.remove('hidden','hide','d-none');
+        setImportantIfNeeded(el,'display','block');
+        setImportantIfNeeded(el,'visibility','visible');
+        setImportantIfNeeded(el,'opacity','1');
+        if(el.hidden)el.hidden=false;
+        if(el.classList.contains('hidden'))el.classList.remove('hidden');
+        if(el.classList.contains('hide'))el.classList.remove('hide');
+        if(el.classList.contains('d-none'))el.classList.remove('d-none');
       };
 
       if(selectedRoot){
@@ -833,18 +840,32 @@ async function initNuiBuilder(p){
         });
 
         // Many FiveM scripts hide #app again after boot while waiting for SendNUIMessage.
-        // Keep ONLY the selected root and required ancestors visible.
+        // Do not use a MutationObserver on style here: Fit also changes style.transform and
+        // that can create a self-triggering observer loop that freezes the browser.
         const keepSelectedVisible=()=>[...chain].reverse().forEach(forceVisible);
-        new MutationObserver(mutations=>{
-          if(mutations.some(m=>chain.has(m.target)))keepSelectedVisible();
-        }).observe(document.body,{
-          subtree:true,
-          attributes:true,
-          attributeFilter:['class','style','hidden']
-        });
-        setTimeout(keepSelectedVisible,50);
-        setTimeout(keepSelectedVisible,250);
-        setTimeout(keepSelectedVisible,750);
+        keepSelectedVisible();
+        setTimeout(keepSelectedVisible,80);
+        setTimeout(keepSelectedVisible,300);
+        setTimeout(keepSelectedVisible,900);
+
+        let visibilityChecks=0;
+        const visibilityWatch=setInterval(()=>{
+          if(++visibilityChecks>40){
+            clearInterval(visibilityWatch);
+            return;
+          }
+          let needsFix=false;
+          for(const el of chain){
+            if(!el||!el.isConnected)continue;
+            const cs=getComputedStyle(el);
+            if(el.hidden||el.classList.contains('hidden')||el.classList.contains('hide')||el.classList.contains('d-none')||
+               cs.display==='none'||cs.visibility==='hidden'||Number(cs.opacity)===0){
+              needsFix=true;
+              break;
+            }
+          }
+          if(needsFix)keepSelectedVisible();
+        },500);
       }
 
       const fitSelected=()=>{
@@ -895,6 +916,11 @@ async function initNuiBuilder(p){
       };
 
       window.__nordFitState={enabled:true,zoom:1};
+      let fitRaf=0;
+      const scheduleFit=()=>{
+        cancelAnimationFrame(fitRaf);
+        fitRaf=requestAnimationFrame(()=>fitSelected());
+      };
       addEventListener('message',event=>{
         const data=event.data||{};
         if(data.type==='nord-builder-fit'){
@@ -902,7 +928,7 @@ async function initNuiBuilder(p){
             enabled:data.enabled!==false,
             zoom:Number(data.zoom)||1
           };
-          fitSelected();
+          scheduleFit();
         }
       });
 
@@ -910,13 +936,16 @@ async function initNuiBuilder(p){
         const target=selectedRoot||document.body;
         const r=target.getBoundingClientRect();
         let left=r.left,top=r.top,right=r.right,bottom=r.bottom;
-        target.querySelectorAll('*').forEach(el=>{
+        const nodes=target.querySelectorAll('*');
+        const limit=Math.min(nodes.length,1200);
+        for(let idx=0;idx<limit;idx++){
+          const el=nodes[idx];
           const s=getComputedStyle(el);
-          if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return;
+          if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)continue;
           const b=el.getBoundingClientRect();
-          if(b.width<2||b.height<2)return;
+          if(b.width<2||b.height<2)continue;
           left=Math.min(left,b.left);top=Math.min(top,b.top);right=Math.max(right,b.right);bottom=Math.max(bottom,b.bottom);
-        });
+        }
         parent.postMessage({
           type:'nord-nui-preview-bounds',
           interfaceId:selected,
