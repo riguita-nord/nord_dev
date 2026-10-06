@@ -700,9 +700,9 @@ function renderProductProcessing(stateData){
           '<div class="upload-transfer-visual" id="processing-transfer">'+
             '<div class="transfer-node transfer-pc"><div class="transfer-node-icon"><i class="fa-solid fa-desktop"></i></div><small>Your PC</small></div>'+
             '<div class="transfer-route">'+
-              '<svg class="transfer-curve" viewBox="0 0 320 96" preserveAspectRatio="none" aria-hidden="true">'+
-                '<path class="transfer-curve-shadow" d="M 8 78 Q 160 4 312 78"></path>'+
-                '<path class="transfer-curve-main" d="M 8 78 Q 160 4 312 78"></path>'+
+              '<svg class="transfer-curve" viewBox="0 0 420 96" preserveAspectRatio="none" aria-hidden="true">'+
+                '<path class="transfer-curve-shadow" d="M 6 78 Q 210 4 414 78"></path>'+
+                '<path class="transfer-curve-main" d="M 6 78 Q 210 4 414 78"></path>'+
               '</svg>'+
               '<div class="transfer-dots"><span></span><span></span><span></span></div>'+
               '<div class="transfer-file"><i class="fa-solid fa-file-zipper"></i></div>'+
