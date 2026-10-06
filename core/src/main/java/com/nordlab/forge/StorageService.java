@@ -6,8 +6,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.*;
 import java.nio.file.*;
-import java.util.Base64;
-import java.util.Comparator;
+import java.util.*;
 import java.util.zip.ZipInputStream;
 
 @ApplicationScoped
@@ -44,6 +43,113 @@ public class StorageService {
             Files.deleteIfExists(target);
             deleteEmptyParents(target.getParent(),rootPath.resolve("storage"));
         }catch(IOException ignored){}
+    }
+
+    public Map<String,Object> reconcile(Database db){
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path releaseRoot=rootPath.resolve("storage").resolve("releases").normalize();
+        Path moduleRoot=rootPath.resolve("storage").resolve("protection-modules").normalize();
+
+        int missingReleaseRows=0;
+        int missingModuleRows=0;
+        int orphanReleaseFiles=0;
+        int orphanModuleFiles=0;
+
+        List<Map<String,Object>> releases=db.query("SELECT id,product_id,storage_path FROM releases");
+        Set<Path> referencedReleaseFiles=new HashSet<>();
+        for(Map<String,Object> r:releases){
+            long rid=((Number)r.get("id")).longValue();
+            Object raw=r.get("storage_path");
+            Path p=raw==null?null:Path.of(String.valueOf(raw)).toAbsolutePath().normalize();
+            if(p!=null && p.startsWith(rootPath) && Files.isRegularFile(p)){
+                referencedReleaseFiles.add(p);
+                continue;
+            }
+
+            db.execute("DELETE FROM download_tokens WHERE release_id=?",rid);
+            db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE release_id=?)",rid);
+            db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE release_id=?)",rid);
+            db.execute("DELETE FROM protection_installations WHERE release_id=?",rid);
+            db.execute("DELETE FROM protection_builds WHERE release_id=?",rid);
+            db.execute("DELETE FROM releases WHERE id=?",rid);
+            missingReleaseRows++;
+        }
+
+        List<Map<String,Object>> modules=db.query("SELECT id,storage_path FROM protection_modules");
+        Set<Path> referencedModuleFiles=new HashSet<>();
+        for(Map<String,Object> m:modules){
+            long id=((Number)m.get("id")).longValue();
+            Object raw=m.get("storage_path");
+            Path p=raw==null?null:Path.of(String.valueOf(raw)).toAbsolutePath().normalize();
+            if(p!=null && p.startsWith(rootPath) && Files.isRegularFile(p)){
+                referencedModuleFiles.add(p);
+                continue;
+            }
+            db.execute("DELETE FROM protection_modules WHERE id=?",id);
+            missingModuleRows++;
+        }
+
+        orphanReleaseFiles=deleteUnreferencedFiles(releaseRoot,referencedReleaseFiles);
+        orphanModuleFiles=deleteUnreferencedFiles(moduleRoot,referencedModuleFiles);
+
+        int demoted=db.execute("""
+          UPDATE products
+          SET status='draft'
+          WHERE status='published'
+            AND NOT EXISTS(
+              SELECT 1 FROM releases r
+              WHERE r.product_id=products.id AND r.published=TRUE
+            )
+          """);
+
+        deleteEmptyTreeDirectories(releaseRoot);
+        deleteEmptyTreeDirectories(moduleRoot);
+
+        Map<String,Object> out=new LinkedHashMap<>();
+        out.put("ok",true);
+        out.put("missing_release_rows_removed",missingReleaseRows);
+        out.put("missing_module_rows_removed",missingModuleRows);
+        out.put("orphan_release_files_removed",orphanReleaseFiles);
+        out.put("orphan_module_files_removed",orphanModuleFiles);
+        out.put("products_demoted_to_draft",demoted);
+        out.put("total_removed",missingReleaseRows+missingModuleRows+orphanReleaseFiles+orphanModuleFiles);
+        return out;
+    }
+
+    private int deleteUnreferencedFiles(Path base,Set<Path> referenced){
+        if(base==null||!Files.exists(base)) return 0;
+        final int[] removed={0};
+        try(var walk=Files.walk(base)){
+            walk.filter(Files::isRegularFile).forEach(p->{
+                Path normalized=p.toAbsolutePath().normalize();
+                if(!referenced.contains(normalized)){
+                    try{
+                        if(Files.deleteIfExists(normalized)) removed[0]++;
+                    }catch(IOException e){
+                        throw new UncheckedIOException(e);
+                    }
+                }
+            });
+        }catch(IOException|UncheckedIOException e){
+            throw new IllegalStateException("storage_reconcile_failed",e);
+        }
+        return removed[0];
+    }
+
+    private void deleteEmptyTreeDirectories(Path base){
+        if(base==null||!Files.exists(base)) return;
+        try(var walk=Files.walk(base)){
+            walk.filter(Files::isDirectory)
+                .sorted(Comparator.reverseOrder())
+                .filter(p->!p.equals(base))
+                .forEach(p->{
+                    try(DirectoryStream<Path> entries=Files.newDirectoryStream(p)){
+                        if(!entries.iterator().hasNext()) Files.deleteIfExists(p);
+                    }catch(IOException ignored){}
+                });
+        }catch(IOException e){
+            throw new IllegalStateException("storage_reconcile_failed",e);
+        }
     }
 
     public void deleteProductStorage(long workspaceId,long productId){
