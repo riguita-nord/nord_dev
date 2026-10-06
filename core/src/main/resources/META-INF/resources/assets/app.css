@@ -775,3 +775,63 @@
   }
   .workspace-quick-grid button:last-child{border-bottom:0}
 }
+
+/* Workspace page loading and error states */
+.page-loading{
+  min-height:420px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:8px;
+  color:var(--muted);
+}
+.page-loading-spinner{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  margin-bottom:5px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--panel);
+  color:var(--brand2);
+  font-size:16px;
+}
+.page-loading strong{
+  color:var(--text);
+  font-size:12px;
+}
+.page-loading span{
+  font-size:10px;
+}
+.page-error{
+  min-height:320px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  padding:30px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--panel);
+}
+.page-error-icon{
+  width:48px;
+  height:48px;
+  flex:0 0 48px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  color:var(--warn);
+  background:color-mix(in srgb,var(--warn) 8%,var(--panel2));
+  border:1px solid color-mix(in srgb,var(--warn) 25%,var(--line));
+}
+.page-error h2{
+  margin:0;
+  font-size:16px;
+}
+.page-error p{
+  margin:5px 0 13px;
+  color:var(--muted);
+  font-size:11px;
+}
