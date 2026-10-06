@@ -692,70 +692,102 @@ async function runWorkspaceProvisioning(workspace){
 }
 
 function renderProductProcessing(stateData){
-  const pct=Math.max(0,Math.min(100,Number(stateData.percent||0)));
-  const phase=stateData.phase||'uploading';
+  const existing=modalRoot.querySelector('#product-processing-modal');
+  if(!existing){
+    modalRoot.innerHTML=
+      '<div class="modal-layer product-processing-layer">'+
+        '<div class="product-processing-modal" id="product-processing-modal">'+
+          '<div class="upload-transfer-visual" id="processing-transfer">'+
+            '<div class="transfer-node transfer-pc"><div class="transfer-node-icon"><i class="fa-solid fa-desktop"></i></div><small>Your PC</small></div>'+
+            '<div class="transfer-route">'+
+              '<svg class="transfer-curve" viewBox="0 0 320 96" preserveAspectRatio="none" aria-hidden="true">'+
+                '<path class="transfer-curve-shadow" d="M 8 78 Q 160 4 312 78"></path>'+
+                '<path class="transfer-curve-main" d="M 8 78 Q 160 4 312 78"></path>'+
+              '</svg>'+
+              '<div class="transfer-dots"><span></span><span></span><span></span></div>'+
+              '<div class="transfer-file"><i class="fa-solid fa-file-zipper"></i></div>'+
+            '</div>'+
+            '<div class="transfer-node transfer-server"><div class="transfer-node-icon"><i class="fa-solid fa-server"></i></div><small>Nord Forge</small></div>'+
+          '</div>'+
+          '<div class="product-processing-kicker">Nord Forge</div>'+
+          '<h2 id="processing-title">Preparing upload</h2>'+
+          '<p class="product-processing-copy" id="processing-copy">Preparing your release...</p>'+
+          '<div class="product-processing-progress">'+
+            '<div class="product-processing-progress-top"><span id="processing-status">Preparing your Forge workspace...</span><strong id="processing-percent">0%</strong></div>'+
+            '<div class="product-processing-track"><div id="processing-bar" style="width:0%"></div></div>'+
+          '</div>'+
+          '<div class="product-processing-steps">'+
+            ['Upload','Validate','Create','Release','Finish'].map((x,i)=>'<div><span>'+(i+1)+'</span><small>'+x+'</small></div>').join('')+
+          '</div>'+
+          '<div class="product-processing-error" id="processing-error" hidden></div>'+
+          '<button class="btn primary" id="processing-back" hidden><i class="fa-solid fa-arrow-left"></i> Back to wizard</button>'+
+        '</div>'+
+      '</div>';
+  }
+  applyProductProcessingState(stateData);
+}
+
+function applyProductProcessingState(stateData){
+  const modal=modalRoot.querySelector('#product-processing-modal');
+  if(!modal)return;
+
+  const phase=stateData.phase||modal.dataset.phase||'uploading';
   const labels={
-    validating:['Validating package','Checking ZIP integrity and release metadata...','fa-shield-check'],
-    uploading:['Uploading release','Sending your ZIP securely to Nord Forge...','fa-cloud-arrow-up'],
-    creating:['Creating product','Preparing the product workspace and metadata...','fa-cubes'],
-    release:['Publishing first release','Linking the uploaded package to the new product...','fa-code-branch'],
-    finishing:['Finishing setup','Running final checks and preparing your workspace...','fa-wand-magic-sparkles'],
-    success:['Product ready','Everything is configured and ready to use.','fa-circle-check'],
-    error:['Something went wrong','The operation stopped before completion.','fa-triangle-exclamation']
+    validating:['Validating package','Checking ZIP integrity and release metadata...'],
+    uploading:['Uploading release','Sending your ZIP securely to Nord Forge...'],
+    creating:['Creating product','Preparing the product workspace and metadata...'],
+    release:['Publishing first release','Linking the uploaded package to the new product...'],
+    finishing:['Finishing setup','Running final checks and preparing your workspace...'],
+    success:['Product ready','Everything is configured and ready to use.'],
+    error:['Something went wrong','The operation stopped before completion.']
   };
   const item=labels[phase]||labels.uploading;
-  const phrases=stateData.phrases||[
-    'Preparing your Forge workspace...',
-    'Securing release metadata...',
-    'Checking package integrity...',
-    'Linking product services...',
-    'Almost there...'
-  ];
-  modalRoot.innerHTML=
-    '<div class="modal-layer product-processing-layer">'+
-      '<div class="product-processing-modal '+phase+'">'+
-        '<div class="upload-transfer-visual '+phase+'">'+
-          '<div class="transfer-node transfer-pc"><div class="transfer-node-icon"><i class="fa-solid fa-desktop"></i></div><small>Your PC</small></div>'+
-          '<div class="transfer-route">'+
-            '<div class="transfer-line"></div>'+
-            '<div class="transfer-dots"><span></span><span></span><span></span></div>'+
-            '<div class="transfer-file"><i class="fa-solid fa-file-zipper"></i></div>'+
-          '</div>'+
-          '<div class="transfer-node transfer-server"><div class="transfer-node-icon"><i class="fa-solid fa-server"></i></div><small>Nord Forge</small></div>'+
-        '</div>'+
-        '<div class="product-processing-kicker">Nord Forge</div>'+
-        '<h2>'+h(item[0])+'</h2>'+
-        '<p class="product-processing-copy">'+h(item[1])+'</p>'+
-        '<div class="product-processing-progress">'+
-          '<div class="product-processing-progress-top"><span id="processing-status">'+h(stateData.status||phrases[0])+'</span><strong id="processing-percent">'+pct+'%</strong></div>'+
-          '<div class="product-processing-track"><div id="processing-bar" style="width:'+pct+'%"></div></div>'+
-        '</div>'+
-        '<div class="product-processing-steps">'+
-          ['Upload','Validate','Create','Release','Finish'].map((x,i)=>'<div class="'+((stateData.step||1)>i+1?'done':(stateData.step||1)===i+1?'active':'')+'"><span>'+( ((stateData.step||1)>i+1)?'<i class="fa-solid fa-check"></i>':i+1)+'</span><small>'+x+'</small></div>').join('')+
-        '</div>'+
-        (phase==='error'?'<div class="product-processing-error">'+h(stateData.error||'Unknown error')+'</div><button class="btn primary" id="processing-back"><i class="fa-solid fa-arrow-left"></i> Back to wizard</button>':'')+
-      '</div>'+
-    '</div>';
-  if(phase==='error'){
-    const back=modalRoot.querySelector('#processing-back');
-    if(back)back.onclick=stateData.onBack||(()=>{});
-  }
-}
-function updateProductProcessing(percent,status,step){
+  modal.dataset.phase=phase;
+  modal.className='product-processing-modal '+phase;
+
+  const transfer=modalRoot.querySelector('#processing-transfer');
+  if(transfer)transfer.className='upload-transfer-visual '+phase;
+
+  const title=modalRoot.querySelector('#processing-title');
+  const copy=modalRoot.querySelector('#processing-copy');
+  if(title)title.textContent=item[0];
+  if(copy)copy.textContent=item[1];
+
+  const pctValue=stateData.percent!=null?Math.max(0,Math.min(100,Number(stateData.percent))):Number(modal.dataset.percent||0);
+  modal.dataset.percent=String(pctValue);
   const bar=modalRoot.querySelector('#processing-bar');
   const pct=modalRoot.querySelector('#processing-percent');
-  const txt=modalRoot.querySelector('#processing-status');
-  if(bar)bar.style.width=Math.max(0,Math.min(100,percent))+'%';
-  if(pct)pct.textContent=Math.max(0,Math.min(100,Math.round(percent)))+'%';
-  if(txt&&status)txt.textContent=status;
-  if(step){
-    modalRoot.querySelectorAll('.product-processing-steps>div').forEach((el,i)=>{
-      el.classList.toggle('done',i+1<step);
-      el.classList.toggle('active',i+1===step);
-      const span=el.querySelector('span');
-      if(span)span.innerHTML=i+1<step?'<i class="fa-solid fa-check"></i>':String(i+1);
-    });
+  if(bar)bar.style.width=pctValue+'%';
+  if(pct)pct.textContent=Math.round(pctValue)+'%';
+
+  const status=modalRoot.querySelector('#processing-status');
+  if(status&&stateData.status)status.textContent=stateData.status;
+
+  const step=stateData.step!=null?Number(stateData.step):Number(modal.dataset.step||1);
+  modal.dataset.step=String(step);
+  modalRoot.querySelectorAll('.product-processing-steps>div').forEach((el,i)=>{
+    el.classList.toggle('done',i+1<step);
+    el.classList.toggle('active',i+1===step);
+    const span=el.querySelector('span');
+    if(span)span.innerHTML=i+1<step?'<i class="fa-solid fa-check"></i>':String(i+1);
+  });
+
+  const error=modalRoot.querySelector('#processing-error');
+  const back=modalRoot.querySelector('#processing-back');
+  if(phase==='error'){
+    if(error){error.hidden=false;error.textContent=stateData.error||'Unknown error';}
+    if(back){
+      back.hidden=false;
+      back.onclick=stateData.onBack||(()=>{});
+    }
+  }else{
+    if(error)error.hidden=true;
+    if(back)back.hidden=true;
   }
+}
+
+function updateProductProcessing(percent,status,step){
+  applyProductProcessingState({percent,status,step});
 }
 
 function createProduct(){
