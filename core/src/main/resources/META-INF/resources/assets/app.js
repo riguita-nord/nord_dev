@@ -373,6 +373,7 @@ if(state.view==='products'){
   );
   document.querySelector('#product-new').onclick=createProduct;
   document.querySelectorAll('[data-manage-product]').forEach(b=>b.onclick=()=>openProductWorkspace(b.dataset.manageProduct));
+  document.querySelectorAll('[data-open-nui]').forEach(b=>b.onclick=e=>{e.stopPropagation();openNuiBuilder(b.dataset.openNui)});
   document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=e=>{e.stopPropagation();publishProduct(b.dataset.publish)});
   return;
 }
@@ -461,6 +462,7 @@ function devProductCard(p){
       '<div class="product-card-price"><span>Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div>'+
       '<div class="product-card-actions">'+
         (p.status!=='published'?'<button class="btn" data-publish="'+p.id+'"><i class="fa-solid fa-upload"></i> Publish</button>':'')+
+        '<button class="btn nui-card-btn" data-open-nui="'+p.id+'"><i class="fa-solid fa-pen-ruler"></i> NUI Builder</button>'+
         '<button class="btn primary" data-manage-product="'+p.id+'">Manage <i class="fa-solid fa-arrow-right"></i></button>'+
       '</div>'+
     '</div>'+
@@ -469,8 +471,11 @@ function devProductCard(p){
 function openProductWorkspace(id){
   state.productId=Number(id);state.productTab='overview';state.view='products';renderShell();loadView();
 }
+function openNuiBuilder(id){
+  state.productId=Number(id);state.productTab='builder';state.view='products';renderShell();loadView();
+}
 function productTabs(){
-  const tabs=[['overview','fa-chart-line','Overview'],['releases','fa-code-branch','Releases'],['licensing','fa-key','Licensing'],['protection','fa-shield-halved','Protection'],['settings','fa-gear','Settings']];
+  const tabs=[['overview','fa-chart-line','Overview'],['builder','fa-pen-ruler','NUI Builder'],['releases','fa-code-branch','Releases'],['licensing','fa-key','Licensing'],['protection','fa-shield-halved','Protection'],['settings','fa-gear','Settings']];
   return '<div class="product-tabs">'+tabs.map(t=>'<button class="'+(state.productTab===t[0]?'active':'')+'" data-product-tab="'+t[0]+'"><i class="fa-solid '+t[1]+'"></i> '+t[2]+'</button>').join('')+'</div>';
 }
 function renderProductWorkspace(d){
@@ -490,10 +495,67 @@ function renderProductWorkspace(d){
         '<div><span>Status</span><strong>'+h(p.status)+'</strong></div><div><span>Category</span><strong>'+h(p.category||'resource')+'</strong></div><div><span>Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div><div><span>Purchases</span><strong>'+h(d.purchases||0)+'</strong></div>'+
       '</div></section>'+
       '<section class="panel"><div class="panel-head"><div><h2>Quick actions</h2><p>Continue managing this product.</p></div></div><div class="product-action-list">'+
+        '<button data-product-tab="builder"><i class="fa-solid fa-pen-ruler"></i><span><strong>Open NUI Builder</strong><small>Design and preview the product interface</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
         '<button data-product-tab="releases"><i class="fa-solid fa-cloud-arrow-up"></i><span><strong>Upload release</strong><small>Publish a new product version</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
         '<button data-product-tab="licensing"><i class="fa-solid fa-key"></i><span><strong>Manage licensing</strong><small>Grant and revoke customer access</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
         '<button data-product-tab="protection"><i class="fa-solid fa-shield-halved"></i><span><strong>Runtime protection</strong><small>Configure builds and installations</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
       '</div></section></div>';
+  }else if(state.productTab==='builder'){
+    body=
+      '<div class="nui-builder" id="nui-builder">'+
+        '<header class="nui-builder-toolbar">'+
+          '<div class="nui-builder-title"><div class="nui-builder-mark"><i class="fa-solid fa-pen-ruler"></i></div><div><strong>NUI Builder</strong><span>Visual workspace for '+h(p.name)+'</span></div></div>'+
+          '<div class="nui-builder-toolbar-center">'+
+            '<button class="nui-view-btn active" data-nui-view="desktop" title="Desktop"><i class="fa-solid fa-desktop"></i></button>'+
+            '<button class="nui-view-btn" data-nui-view="tablet" title="Tablet"><i class="fa-solid fa-tablet-screen-button"></i></button>'+
+            '<button class="nui-view-btn" data-nui-view="mobile" title="Mobile"><i class="fa-solid fa-mobile-screen-button"></i></button>'+
+          '</div>'+
+          '<div class="nui-builder-toolbar-actions">'+
+            '<button class="btn" id="nui-refresh"><i class="fa-solid fa-rotate-right"></i> Preview</button>'+
+            '<button class="btn" id="nui-export"><i class="fa-solid fa-file-export"></i> Export HTML</button>'+
+            '<button class="btn primary" id="nui-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>'+
+          '</div>'+
+        '</header>'+
+        '<div class="nui-builder-layout">'+
+          '<aside class="nui-builder-palette">'+
+            '<div class="nui-builder-section-title">Components</div>'+
+            '<div class="nui-component-grid">'+
+              '<button data-nui-component="container"><i class="fa-solid fa-square"></i><span>Container</span></button>'+
+              '<button data-nui-component="card"><i class="fa-solid fa-window-maximize"></i><span>Card</span></button>'+
+              '<button data-nui-component="heading"><i class="fa-solid fa-heading"></i><span>Heading</span></button>'+
+              '<button data-nui-component="text"><i class="fa-solid fa-align-left"></i><span>Text</span></button>'+
+              '<button data-nui-component="button"><i class="fa-solid fa-hand-pointer"></i><span>Button</span></button>'+
+              '<button data-nui-component="input"><i class="fa-solid fa-i-cursor"></i><span>Input</span></button>'+
+              '<button data-nui-component="image"><i class="fa-solid fa-image"></i><span>Image</span></button>'+
+              '<button data-nui-component="icon"><i class="fa-solid fa-icons"></i><span>FA Icon</span></button>'+
+            '</div>'+
+            '<div class="nui-builder-section-title">Templates</div>'+
+            '<div class="nui-template-list">'+
+              '<button data-nui-template="blank"><i class="fa-solid fa-file"></i><span><strong>Blank</strong><small>Start clean</small></span></button>'+
+              '<button data-nui-template="panel"><i class="fa-solid fa-table-columns"></i><span><strong>Panel</strong><small>Centered game panel</small></span></button>'+
+              '<button data-nui-template="dashboard"><i class="fa-solid fa-gauge"></i><span><strong>Dashboard</strong><small>Sidebar + content</small></span></button>'+
+            '</div>'+
+          '</aside>'+
+          '<main class="nui-builder-preview-area">'+
+            '<div class="nui-preview-stage desktop" id="nui-preview-stage">'+
+              '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts"></iframe>'+
+            '</div>'+
+          '</main>'+
+          '<aside class="nui-builder-code">'+
+            '<div class="nui-code-tabs">'+
+              '<button class="active" data-nui-code="html"><i class="fa-brands fa-html5"></i> HTML</button>'+
+              '<button data-nui-code="css"><i class="fa-brands fa-css3-alt"></i> CSS</button>'+
+              '<button data-nui-code="js"><i class="fa-brands fa-js"></i> JS</button>'+
+            '</div>'+
+            '<div class="nui-code-panes">'+
+              '<textarea id="nui-html" class="active" data-nui-pane="html" spellcheck="false"></textarea>'+
+              '<textarea id="nui-css" data-nui-pane="css" spellcheck="false"></textarea>'+
+              '<textarea id="nui-js" data-nui-pane="js" spellcheck="false"></textarea>'+
+            '</div>'+
+            '<footer class="nui-code-foot"><span id="nui-save-state"><i class="fa-solid fa-circle"></i> Loading project…</span><span>Live preview</span></footer>'+
+          '</aside>'+
+        '</div>'+
+      '</div>';
   }else if(state.productTab==='releases'){
     body='<section class="panel"><div class="panel-head"><div><h2>Releases</h2><p>Versions, ZIP artifacts and publication state.</p></div><button class="btn primary" id="product-release-new"><i class="fa-solid fa-cloud-arrow-up"></i> Upload release</button></div>'+
       (releases.length?'<div class="product-data-list">'+releases.map(r=>'<div class="product-data-row"><div class="product-data-main"><i class="fa-solid fa-code-branch"></i><div><strong>v'+h(r.version)+'</strong><span>'+h(r.file_name||'No file')+' · '+h(r.created_at)+'</span></div></div><div class="product-data-actions"><span class="pill '+(r.published?'good':'')+'">'+(r.published?'published':'draft')+'</span><a class="btn" href="/api/v2/releases/'+r.id+'/direct-download"><i class="fa-solid fa-download"></i></a><button class="btn danger" data-delete-release="'+r.id+'"><i class="fa-solid fa-trash"></i></button></div></div>').join('')+'</div>':empty('fa-code-branch','No releases','Upload the first release for this product.'))+
@@ -529,7 +591,115 @@ function renderProductWorkspace(d){
   document.querySelectorAll('[data-revoke-install]').forEach(b=>b.onclick=()=>revokeProductInstallation(b.dataset.revokeInstall));
   const settings=document.querySelector('#product-settings-form');if(settings)settings.onsubmit=e=>saveProductSettings(e,p);
   const del=document.querySelector('#delete-product');if(del)del.onclick=()=>deleteCurrentProduct(p);
+  if(state.productTab==='builder')initNuiBuilder(p);
 }
+async function initNuiBuilder(p){
+  const html=document.querySelector('#nui-html');
+  const css=document.querySelector('#nui-css');
+  const js=document.querySelector('#nui-js');
+  const frame=document.querySelector('#nui-preview');
+  const stage=document.querySelector('#nui-preview-stage');
+  const save=document.querySelector('#nui-save');
+  const stateLabel=document.querySelector('#nui-save-state');
+  if(!html||!css||!js||!frame)return;
+
+  let project;
+  try{
+    project=await api('/products/'+p.id+'/nui');
+  }catch(e){
+    if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle-exclamation"></i> '+h(e.message);
+    return;
+  }
+
+  html.value=project.html||'';
+  css.value=project.css||'';
+  js.value=project.js||'';
+  let settings={viewport:'desktop',background:'transparent'};
+  try{settings={...settings,...JSON.parse(project.settings_json||'{}')}}catch(e){}
+
+  const renderPreview=()=>{
+    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;}'+css.value+'</style></head><body>'+html.value+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    frame.srcdoc=documentHtml;
+  };
+
+  const markDirty=()=>{
+    if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle"></i> Unsaved changes';
+    clearTimeout(markDirty.timer);
+    markDirty.timer=setTimeout(renderPreview,180);
+  };
+  [html,css,js].forEach(el=>el.addEventListener('input',markDirty));
+
+  document.querySelectorAll('[data-nui-code]').forEach(btn=>btn.onclick=()=>{
+    document.querySelectorAll('[data-nui-code]').forEach(x=>x.classList.toggle('active',x===btn));
+    document.querySelectorAll('[data-nui-pane]').forEach(x=>x.classList.toggle('active',x.dataset.nuiPane===btn.dataset.nuiCode));
+  });
+
+  const setViewport=view=>{
+    settings.viewport=view;
+    stage.className='nui-preview-stage '+view;
+    document.querySelectorAll('[data-nui-view]').forEach(x=>x.classList.toggle('active',x.dataset.nuiView===view));
+  };
+  document.querySelectorAll('[data-nui-view]').forEach(btn=>btn.onclick=()=>setViewport(btn.dataset.nuiView));
+  setViewport(settings.viewport||'desktop');
+
+  const snippets={
+    container:'\n<div class="container">\n  <!-- content -->\n</div>\n',
+    card:'\n<div class="card">\n  <h3>Card title</h3>\n  <p>Card content</p>\n</div>\n',
+    heading:'\n<h1>Heading</h1>\n',
+    text:'\n<p>Your text here.</p>\n',
+    button:'\n<button class="btn">Action</button>\n',
+    input:'\n<input type="text" placeholder="Enter value">\n',
+    image:'\n<img src="https://placehold.co/640x360" alt="Preview">\n',
+    icon:'\n<i class="fa-solid fa-star"></i>\n'
+  };
+  document.querySelectorAll('[data-nui-component]').forEach(btn=>btn.onclick=()=>{
+    const snippet=snippets[btn.dataset.nuiComponent]||'';
+    const start=html.selectionStart||html.value.length;
+    const end=html.selectionEnd||start;
+    html.value=html.value.slice(0,start)+snippet+html.value.slice(end);
+    html.focus();
+    html.selectionStart=html.selectionEnd=start+snippet.length;
+    markDirty();
+  });
+
+  const templates={
+    blank:{html:'<div class="app-shell"></div>',css:'*{box-sizing:border-box}body{margin:0;background:transparent;color:#fff;font-family:Inter,Arial,sans-serif}.app-shell{min-height:100vh}',js:''},
+    panel:{html:'<div class="app-shell"><section class="nui-panel"><div class="eyebrow">NORD UI</div><h1>'+h(p.name)+'</h1><p>Build your FiveM experience here.</p><button id="primary-action">Continue</button></section></div>',css:'*{box-sizing:border-box}body{margin:0;background:transparent;color:#fff;font-family:Inter,Arial,sans-serif}.app-shell{min-height:100vh;display:grid;place-items:center;padding:32px}.nui-panel{width:min(560px,92vw);padding:28px;border:1px solid #293247;border-radius:18px;background:#0b1018;box-shadow:0 28px 90px rgba(0,0,0,.45)}.eyebrow{color:#9b88ff;font-size:11px;font-weight:900;letter-spacing:.14em}.nui-panel h1{margin:8px 0;font-size:30px}.nui-panel p{color:#96a1b4}.nui-panel button{margin-top:16px;padding:11px 16px;border:0;border-radius:10px;background:#7b5cff;color:#fff;font-weight:850}',js:"document.querySelector('#primary-action')?.addEventListener('click',()=>console.log('NUI action'));"},
+    dashboard:{html:'<div class="dashboard"><aside><div class="brand">N</div><button class="active">Overview</button><button>Settings</button></aside><main><div class="eyebrow">DASHBOARD</div><h1>'+h(p.name)+'</h1><div class="grid"><article><span>Status</span><strong>Online</strong></article><article><span>Players</span><strong>128</strong></article></div></main></div>',css:'*{box-sizing:border-box}body{margin:0;background:#070a0f;color:#fff;font-family:Inter,Arial,sans-serif}.dashboard{min-height:100vh;display:grid;grid-template-columns:170px 1fr}.dashboard aside{padding:18px;border-right:1px solid #222b3a;background:#0b1018}.brand{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#7b5cff;font-weight:900;margin-bottom:24px}.dashboard aside button{width:100%;padding:10px 12px;margin:4px 0;border:0;border-radius:9px;background:transparent;color:#91a0b5;text-align:left}.dashboard aside button.active{background:#151b26;color:#fff}.dashboard main{padding:28px}.eyebrow{color:#9b88ff;font-size:10px;font-weight:900;letter-spacing:.13em}.dashboard h1{font-size:30px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.grid article{padding:18px;border:1px solid #222b3a;border-radius:14px;background:#0c1119}.grid span{display:block;color:#8995a8;font-size:11px}.grid strong{display:block;margin-top:8px;font-size:24px}',js:''}
+  };
+  document.querySelectorAll('[data-nui-template]').forEach(btn=>btn.onclick=()=>{
+    const t=templates[btn.dataset.nuiTemplate];
+    if(!t)return;
+    html.value=t.html;css.value=t.css;js.value=t.js;
+    markDirty();
+  });
+
+  document.querySelector('#nui-refresh').onclick=renderPreview;
+  document.querySelector('#nui-export').onclick=()=>{
+    const out='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css.value+'</style></head><body>'+html.value+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    const blob=new Blob([out],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=(p.slug||'nui')+'-index.html';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+  save.onclick=async()=>{
+    try{
+      save.disabled=true;save.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Saving...';
+      await api('/products/'+p.id+'/nui',{method:'PUT',body:JSON.stringify({html:html.value,css:css.value,js:js.value,settings_json:JSON.stringify(settings)})});
+      if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle-check"></i> Saved';
+      toast('NUI project saved');
+    }catch(e){
+      toast(e.message);
+      if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle-exclamation"></i> Save failed';
+    }finally{
+      save.disabled=false;save.innerHTML='<i class="fa-solid fa-floppy-disk"></i> Save';
+    }
+  };
+
+  if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle-check"></i> Project loaded';
+  renderPreview();
+}
+
 async function deleteProductRelease(id){
   try{await api('/releases/'+id,{method:'DELETE',body:'{}'});toast('Release deleted');loadView()}catch(e){toast(e.message)}
 }
