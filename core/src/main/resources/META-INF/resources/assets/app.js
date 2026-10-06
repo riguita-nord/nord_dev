@@ -875,7 +875,10 @@ function createProduct(){
       create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
       try{
         await validateZipFile(draft.release_file);
-        const base64=await fileBase64(draft.release_file);
+        const upload=await uploadReleaseBinary(draft.release_file,percent=>{
+          create.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Uploading ZIP '+percent+'%';
+        });
+        create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
         const result=await api('/workspaces/'+state.workspace.id+'/products/bootstrap',{method:'POST',body:JSON.stringify({
           name:draft.name.trim(),
           slug:draft.slug.trim(),
@@ -887,7 +890,7 @@ function createProduct(){
           protection_mode:draft.protection_mode,
           release_version:draft.release_version.trim(),
           release_file_name:draft.release_file.name,
-          release_file_base64:base64,
+          release_upload_token:upload.upload_token,
           release_changelog:draft.release_changelog.trim()
         })});
         const product=result.product;
@@ -916,8 +919,31 @@ function createProduct(){
   draw();
 }
 async function publishProduct(id){try{const products=await api('/workspaces/'+state.workspace.id+'/products');const p=products.find(x=>String(x.id)===String(id));await api('/products/'+id,{method:'PUT',body:JSON.stringify({name:p.name,description:p.description,category:p.category,price_cents:p.price_cents,currency:p.currency,license_required:p.license_required,protection_mode:p.protection_mode,status:'published'})});toast('Product published');loadView()}catch(e){toast(e.message)}}
-function createRelease(products){if(!products.length)return toast('Create a product first.');modal('Upload release','<form class="form"><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div><div class="field"><label>Version</label><input name="version" placeholder="2.0.0" required></div><div class="field"><label>ZIP file</label><input name="file" type="file" accept=".zip" required></div><div class="field"><label>Changelog</label><textarea name="changelog" rows="5"></textarea></div></form>',async fd=>{const file=fd.get('file');if(!file||!file.size)throw new Error('ZIP file required');const base64=await fileBase64(file);await api('/products/'+formVal(fd,'product_id')+'/releases',{method:'POST',body:JSON.stringify({version:formVal(fd,'version'),file_name:file.name,file_base64:base64,changelog:formVal(fd,'changelog'),published:true})});toast('Release uploaded');loadView()})}
-function fileBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)})}
+function createRelease(products){if(!products.length)return toast('Create a product first.');modal('Upload release','<form class="form"><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div><div class="field"><label>Version</label><input name="version" placeholder="2.0.0" required></div><div class="field"><label>ZIP file</label><input name="file" type="file" accept=".zip" required></div><div class="field"><label>Changelog</label><textarea name="changelog" rows="5"></textarea></div></form>',async fd=>{const file=fd.get('file');if(!file||!file.size)throw new Error('ZIP file required');await validateZipFile(file);const upload=await uploadReleaseBinary(file);await api('/products/'+formVal(fd,'product_id')+'/releases',{method:'POST',body:JSON.stringify({version:formVal(fd,'version'),file_name:file.name,upload_token:upload.upload_token,changelog:formVal(fd,'changelog'),published:true})});toast('Release uploaded');loadView()})}
+async function uploadReleaseBinary(file,onProgress){
+  await validateZipFile(file);
+  return new Promise((resolve,reject)=>{
+    const xhr=new XMLHttpRequest();
+    xhr.open('POST','/api/v2/workspaces/'+state.workspace.id+'/release-uploads',true);
+    xhr.withCredentials=true;
+    xhr.setRequestHeader('Content-Type','application/octet-stream');
+    if(state.csrf)xhr.setRequestHeader('X-CSRF-Token',state.csrf);
+    xhr.setRequestHeader('X-File-Name',encodeURIComponent(file.name));
+    xhr.upload.onprogress=e=>{
+      if(e.lengthComputable&&onProgress)onProgress(Math.max(1,Math.min(100,Math.round((e.loaded/e.total)*100))));
+    };
+    xhr.onload=()=>{
+      const raw=xhr.responseText||'';
+      let data={};
+      if(raw){try{data=JSON.parse(raw)}catch(e){data={message:raw}}}
+      if(xhr.status>=200&&xhr.status<300)return resolve(data);
+      reject(new Error(data.message||data.error||('HTTP '+xhr.status)));
+    };
+    xhr.onerror=()=>reject(new Error('Release upload connection failed.'));
+    xhr.onabort=()=>reject(new Error('Release upload was cancelled.'));
+    xhr.send(file);
+  });
+}
 async function validateZipFile(file){
   if(!file||!file.size)throw new Error('Select the ZIP for the first release.');
   if(!file.name.toLowerCase().endsWith('.zip'))throw new Error('The release file must use the .zip extension.');
