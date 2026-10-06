@@ -2355,3 +2355,101 @@
     100%{left:calc(100% - 36px);bottom:3px;opacity:0;transform:scale(.9)}
   }
 }
+
+/* Exact motion-path alignment for PC -> Forge transfer */
+.transfer-route{
+  width:100%;
+  min-width:0;
+}
+
+/* The visual curve uses the same 320x96 geometry as the CSS motion path. */
+.transfer-file{
+  left:0!important;
+  top:0!important;
+  bottom:auto!important;
+  margin-left:-21px;
+  margin-top:-21px;
+  transform:none!important;
+  offset-path:path("M 8 78 Q 160 4 312 78");
+  offset-distance:0%;
+  offset-rotate:0deg;
+  animation:transferFileOnCurve 2.7s cubic-bezier(.44,.02,.22,1) infinite!important;
+  will-change:offset-distance,opacity,transform;
+}
+
+@keyframes transferFileOnCurve{
+  0%{
+    offset-distance:0%;
+    opacity:0;
+    transform:scale(.82) rotate(-4deg);
+  }
+  7%{
+    opacity:1;
+    transform:scale(.9) rotate(-2deg);
+  }
+  48%{
+    opacity:1;
+    transform:scale(1.08) rotate(2deg);
+  }
+  88%{
+    opacity:1;
+    transform:scale(.96) rotate(1deg);
+  }
+  100%{
+    offset-distance:100%;
+    opacity:0;
+    transform:scale(.86) rotate(0deg);
+  }
+}
+
+/* Put the three indicator dots on the exact same parabola. */
+.transfer-dots{
+  inset:0!important;
+}
+.transfer-dots span{
+  left:0!important;
+  top:0!important;
+  margin:-3.5px 0 0 -3.5px!important;
+  offset-path:path("M 8 78 Q 160 4 312 78");
+  offset-rotate:0deg;
+}
+.transfer-dots span:nth-child(1){offset-distance:27%}
+.transfer-dots span:nth-child(2){offset-distance:50%}
+.transfer-dots span:nth-child(3){offset-distance:73%}
+
+/* Keep the package pinned to the destination after completion. */
+.upload-transfer-visual.success .transfer-file{
+  animation:none!important;
+  offset-distance:100%!important;
+  opacity:1!important;
+  transform:scale(1)!important;
+}
+
+/* Stop exactly at the apex when an error occurs. */
+.upload-transfer-visual.error .transfer-file{
+  animation:none!important;
+  offset-distance:50%!important;
+  opacity:1!important;
+  transform:scale(1)!important;
+}
+
+/* During post-upload phases the package is already on the Forge side. */
+.upload-transfer-visual.creating .transfer-file,
+.upload-transfer-visual.release .transfer-file,
+.upload-transfer-visual.finishing .transfer-file{
+  animation:none!important;
+  offset-distance:100%!important;
+  opacity:1!important;
+  transform:scale(1)!important;
+}
+
+@media(max-width:620px){
+  .transfer-file{
+    margin-left:-18px;
+    margin-top:-18px;
+    offset-path:path("M 6 68 Q 128 4 250 68");
+  }
+  .transfer-dots span{
+    offset-path:path("M 6 68 Q 128 4 250 68");
+  }
+}
