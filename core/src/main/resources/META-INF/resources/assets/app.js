@@ -21,6 +21,11 @@ async function boot(){
     await dismissBootSplash();
     if(setup.needs_setup){renderSetup();return}
     const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();
+    if(state.surface==='dev'){
+      state.workspace=state.workspace||state.workspaces.find(w=>w.status==='active')||state.workspaces[0]||null;
+      state.view='overview';
+      if(!state.workspace){state.surface='client';state.view='home'}
+    }
     let pending=null;try{pending=JSON.parse(localStorage.getItem('nf_workspace_provisioning')||'null')}catch(e){}
     if(pending&&pending.id){
       const w=state.workspaces.find(x=>String(x.id)===String(pending.id))||pending;
@@ -204,6 +209,8 @@ function workspaceRail(){
 }
 function renderShell(){
   localStorage.setItem('nf_surface',state.surface);
+  const validViews=(I[state.surface]||[]).map(x=>x[0]);
+  if(!validViews.includes(state.view)) state.view=state.surface==='dev'?'overview':'home';
   if(state.surface==='dev'&&!state.workspace&&state.workspaces.length){
     state.workspace=state.workspaces.find(w=>w.status==='active')||state.workspaces[0];
   }
@@ -365,7 +372,11 @@ if(state.view==='docs'){setTitle('Docs & Website');const [docs,pages]=await Prom
 if(state.view==='integrations'){setTitle('Integrations');const [items,tebex,discord]=await Promise.all([api('/workspaces/'+wid+'/integrations'),api('/workspaces/'+wid+'/tebex'),api('/workspaces/'+wid+'/discord')]);content('<div class="hero"><div><h1>Integrations</h1><p>Commerce and community connections scoped to this workspace.</p></div></div><div class="cards"><article class="card"><h3><i class="fa-solid fa-cart-shopping"></i> Tebex</h3><p>Checkout handoff and signed entitlement webhook.</p><div class="meta"><span class="pill '+(tebex.enabled?'good':'')+'">'+(tebex.enabled?'enabled':'not configured')+'</span></div><div style="margin-top:12px"><button class="btn primary" id="tebex-config">Configure</button></div></article><article class="card"><h3><i class="fa-brands fa-discord"></i> Discord</h3><p>Guild resources, bot test messages and workspace connection.</p><div class="meta"><span class="pill '+(discord.enabled?'good':'')+'">'+(discord.enabled?'enabled':'not configured')+'</span></div><div style="margin-top:12px"><button class="btn" id="discord-config">Settings</button> <button class="btn primary" id="discord-connect">Connect</button></div></article></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h2>Workspace integrations</h2></div>'+table(items,[['type','Type'],['enabled','Enabled'],['updated_at','Updated']])+'</div>');document.querySelector('#tebex-config').onclick=()=>configureTebex(tebex);document.querySelector('#discord-config').onclick=()=>configureDiscord(discord);document.querySelector('#discord-connect').onclick=connectDiscord;return}
 if(state.view==='team'){setTitle('Team');const rows=await api('/workspaces/'+wid+'/members');content('<div class="hero"><div><h1>Team</h1><p>Workspace access is independent from customer account access.</p></div><button class="btn primary" id="member-new">Add member</button></div><div class="panel">'+table(rows,[['display_name','Name'],['email','Email'],['role','Role'],['status','Status'],['created_at','Added']])+'</div>');document.querySelector('#member-new').onclick=addMember;return}
 if(state.view==='infra'){setTitle('Infrastructure');const [nodes,keys,ints]=await Promise.all([api('/workspaces/'+wid+'/infra'),api('/workspaces/'+wid+'/api-keys'),api('/workspaces/'+wid+'/integrations')]);content('<div class="hero"><div><h1>Infrastructure</h1><p>External endpoints, scoped API keys and optional integrations.</p></div><div><button class="btn" id="infra-new">Add node</button> <button class="btn primary" id="key-new">Create API key</button></div></div><div class="panel"><div class="panel-head"><h2>Nodes</h2></div>'+table(nodes,[['name','Name'],['type','Type'],['url','URL'],['status','Status']])+'</div><div class="split"><div class="panel"><div class="panel-head"><h2>API keys</h2></div>'+table(keys,[['name','Name'],['prefix','Prefix'],['scopes','Scopes'],['created_at','Created']])+'</div><div class="panel"><div class="panel-head"><h2>Integrations</h2></div>'+table(ints,[['type','Type'],['enabled','Enabled'],['updated_at','Updated']])+'</div></div>');document.querySelector('#infra-new').onclick=addInfra;document.querySelector('#key-new').onclick=createApiKey;return}
-if(state.view==='audit'){setTitle('Audit');const rows=await api('/workspaces/'+wid+'/audit');return content('<div class="hero"><div><h1>Audit</h1><p>Workspace mutations and security-relevant actions.</p></div></div><div class="panel">'+table(rows,[['action','Action'],['display_name','Actor'],['target','Target'],['details','Details'],['created_at','Time']])+'</div>')}}
+if(state.view==='audit'){setTitle('Audit');const rows=await api('/workspaces/'+wid+'/audit');return content('<div class="hero"><div><h1>Audit</h1><p>Workspace mutations and security-relevant actions.</p></div></div><div class="panel">'+table(rows,[['action','Action'],['display_name','Actor'],['target','Target'],['details','Details'],['created_at','Time']])+'</div>')}
+state.view='overview';
+renderShell();
+return loadView();
+}
 function devProductCard(p){return '<article class="card"><h3>'+h(p.name)+'</h3><p>'+h(p.description||'No description.')+'</p><div class="meta"><span class="pill">'+h(p.category||'resource')+'</span><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span><span class="pill">'+h(p.protection_mode)+'</span></div><div style="margin-top:12px">'+(p.status!=='published'?'<button class="btn primary" data-publish="'+p.id+'">Publish</button>':'')+'</div></article>'}
 function createWorkspace(){
   const draft={step:1,name:'',slug:'',store_name:'',currency:'EUR',theme:state.theme==='light'?'light':'dark'};
