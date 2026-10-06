@@ -14,6 +14,8 @@ import java.util.regex.*;
 
 @ApplicationScoped
 public class StorageService {
+    public record NuiAsset(byte[] data,String mediaType,String entryPath) {}
+
     @ConfigProperty(name="NORD_FORGE_DATA_DIR",defaultValue="/tmp/nord-forge") String root;
 
     public Map<String,Object> saveReleaseUpload(long workspaceId,String fileName,InputStream input){
@@ -561,6 +563,82 @@ public class StorageService {
             }
             return out.toByteArray();
         }
+    }
+
+    public NuiAsset readNuiAsset(String zipPath,String requestedEntry){
+        if(zipPath==null||zipPath.isBlank()||requestedEntry==null||requestedEntry.isBlank()) return null;
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path archive=Path.of(zipPath).toAbsolutePath().normalize();
+        if(!archive.startsWith(rootPath)||!Files.isRegularFile(archive)) return null;
+
+        String wanted=normalizeZipName(requestedEntry);
+        if(wanted.contains("..")||wanted.startsWith("/")) return null;
+
+        try(ZipFile zip=new ZipFile(archive.toFile())){
+            ZipEntry entry=null;
+            Enumeration<? extends ZipEntry> it=zip.entries();
+            while(it.hasMoreElements()){
+                ZipEntry candidate=it.nextElement();
+                if(candidate.isDirectory()) continue;
+                String name=normalizeZipName(candidate.getName());
+                if(name.equalsIgnoreCase(wanted)){
+                    entry=candidate;
+                    wanted=name;
+                    break;
+                }
+            }
+            if(entry==null) return null;
+            if(entry.getSize()>32L*1024L*1024L) throw new IOException("zip_entry_too_large");
+            return new NuiAsset(readZipBytes(zip,entry,32*1024*1024),mimeFor(wanted),wanted);
+        }catch(IOException e){
+            throw new IllegalStateException("nui_asset_read_failed",e);
+        }
+    }
+
+    public String injectNuiPreviewBridge(String html,String previewBase){
+        if(html==null) return "";
+        String base=(previewBase==null?"":previewBase).replace("\"","&quot;");
+        String bridge="""
+          <script>
+          (() => {
+            window.__NORD_FORGE_PREVIEW__ = true;
+            if (typeof window.GetParentResourceName !== 'function') {
+              window.GetParentResourceName = () => 'nord_preview';
+            }
+            if (typeof window.invokeNative !== 'function') {
+              window.invokeNative = () => {};
+            }
+            const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
+            window.fetch = (input, init) => {
+              const url = String(input && input.url ? input.url : input || '');
+              if (/^https:\/\/[^/]+\//i.test(url) || url.startsWith('nui://') || url.startsWith('https://cfx-nui-')) {
+                return Promise.resolve(new Response('{}', {status:200, headers:{'Content-Type':'application/json'}}));
+              }
+              return nativeFetch ? nativeFetch(input, init) : Promise.resolve(new Response('{}',{status:200}));
+            };
+            window.addEventListener('message', (event) => {
+              const data = event.data || {};
+              if (data && data.__nordRuntimePayload) {
+                window.dispatchEvent(new MessageEvent('message', { data: data.payload }));
+              }
+            });
+            window.addEventListener('error', e => {
+              try { parent.postMessage({type:'nord-live-preview-error',message:String(e.message||'Preview error')}, '*'); } catch (_) {}
+            });
+            window.addEventListener('unhandledrejection', e => {
+              try { parent.postMessage({type:'nord-live-preview-error',message:String((e.reason&&e.reason.message)||e.reason||'Preview rejection')}, '*'); } catch (_) {}
+            });
+          })();
+          </script>
+          """;
+        String baseTag=base.isBlank()?"":"<base href=\""+base+"\">";
+        String injection=baseTag+bridge;
+        int head=html.toLowerCase(Locale.ROOT).indexOf("<head");
+        if(head>=0){
+            int close=html.indexOf('>',head);
+            if(close>=0) return html.substring(0,close+1)+injection+html.substring(close+1);
+        }
+        return injection+html;
     }
 
     private String mimeFor(String path){
