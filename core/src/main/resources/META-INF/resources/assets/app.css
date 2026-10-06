@@ -3152,3 +3152,108 @@
     width:100%;
   }
 }
+
+/* NUI Builder viewport-fit studio layout */
+.nui-builder{
+  height:calc(100vh - 300px)!important;
+  min-height:440px!important;
+  max-height:760px;
+}
+.nui-builder-layout{
+  height:100%;
+  min-height:0!important;
+  overflow:hidden;
+  grid-template-columns:176px minmax(0,1fr) minmax(300px,360px)!important;
+}
+.nui-builder-palette,
+.nui-builder-preview-area,
+.nui-builder-code{
+  min-height:0!important;
+  height:100%;
+}
+.nui-builder-palette{
+  overflow-y:auto!important;
+  overflow-x:hidden;
+}
+.nui-builder-preview-area{
+  overflow:auto!important;
+  padding:12px!important;
+}
+.nui-builder-code{
+  overflow:hidden;
+}
+.nui-code-panes{
+  min-height:0!important;
+  overflow:hidden;
+}
+.nui-code-panes textarea{
+  min-height:0!important;
+  overflow:auto;
+}
+.nui-preview-stage{
+  min-height:0!important;
+  height:100%!important;
+  max-height:100%;
+}
+.nui-preview-stage iframe{
+  min-height:0!important;
+  height:100%!important;
+}
+.nui-preview-stage.tablet{
+  width:min(760px,86%)!important;
+  height:100%!important;
+}
+.nui-preview-stage.mobile{
+  width:390px!important;
+  max-width:92%!important;
+  height:100%!important;
+}
+.nui-builder-palette::-webkit-scrollbar,
+.nui-builder-preview-area::-webkit-scrollbar,
+.nui-code-panes textarea::-webkit-scrollbar{
+  width:6px;
+  height:6px;
+}
+.nui-builder-palette::-webkit-scrollbar-thumb,
+.nui-builder-preview-area::-webkit-scrollbar-thumb,
+.nui-code-panes textarea::-webkit-scrollbar-thumb{
+  background:var(--line2);
+  border-radius:999px;
+}
+
+@media(max-height:820px) and (min-width:1081px){
+  .nui-builder{
+    height:calc(100vh - 255px)!important;
+    min-height:410px!important;
+  }
+  .nui-builder-toolbar{
+    min-height:52px;
+  }
+  .nui-component-grid button{
+    min-height:54px;
+  }
+}
+
+@media(max-width:1320px) and (min-width:1081px){
+  .nui-builder-layout{
+    grid-template-columns:160px minmax(0,1fr) 320px!important;
+  }
+}
+
+@media(max-width:1080px){
+  .nui-builder{
+    height:auto!important;
+    max-height:none!important;
+    min-height:0!important;
+  }
+  .nui-builder-layout{
+    height:auto!important;
+    overflow:visible!important;
+  }
+  .nui-builder-preview-area{
+    min-height:500px!important;
+  }
+  .nui-builder-code{
+    min-height:360px!important;
+  }
+}
