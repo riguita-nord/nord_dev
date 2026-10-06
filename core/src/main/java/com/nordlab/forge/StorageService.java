@@ -15,6 +15,95 @@ import java.util.zip.ZipInputStream;
 public class StorageService {
     @ConfigProperty(name="NORD_FORGE_DATA_DIR",defaultValue="/tmp/nord-forge") String root;
 
+    public Map<String,Object> saveReleaseUpload(long workspaceId,String fileName,InputStream input){
+        if(input==null) throw validation("release_file_required");
+        if(fileName==null||!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) throw validation("zip_required");
+
+        String token=UUID.randomUUID().toString();
+        Path uploadDir=Path.of(root,"storage","tmp","release-uploads",String.valueOf(workspaceId)).toAbsolutePath().normalize();
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        if(!uploadDir.startsWith(rootPath)) throw new IllegalArgumentException("storage_path_outside_root");
+
+        Path temp=uploadDir.resolve(token+".upload").normalize();
+        long total=0;
+        try{
+            Files.createDirectories(uploadDir);
+            try(OutputStream out=Files.newOutputStream(temp,StandardOpenOption.CREATE_NEW,StandardOpenOption.WRITE)){
+                byte[] buffer=new byte[1024*1024];
+                int read;
+                while((read=input.read(buffer))!=-1){
+                    total+=read;
+                    if(total>512L*1024L*1024L){
+                        try{Files.deleteIfExists(temp);}catch(IOException ignored){}
+                        throw validation("release_too_large_512mb");
+                    }
+                    out.write(buffer,0,read);
+                }
+            }
+            if(total==0){
+                Files.deleteIfExists(temp);
+                throw validation("release_file_required");
+            }
+            validateZipPath(temp);
+            return Map.of(
+                "ok",true,
+                "upload_token",token,
+                "file_name",fileName,
+                "size",total
+            );
+        }catch(WebApplicationException e){
+            try{Files.deleteIfExists(temp);}catch(IOException ignored){}
+            throw e;
+        }catch(IOException e){
+            try{Files.deleteIfExists(temp);}catch(IOException ignored){}
+            throw new IllegalStateException("release_upload_failed",e);
+        }
+    }
+
+    public String claimReleaseUpload(long workspaceId,long productId,String version,String fileName,String token){
+        if(token==null||!token.matches("[0-9a-fA-F-]{36}")) throw validation("release_upload_token_invalid");
+        if(fileName==null||!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) throw validation("zip_required");
+
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path temp=Path.of(root,"storage","tmp","release-uploads",String.valueOf(workspaceId),token+".upload").toAbsolutePath().normalize();
+        if(!temp.startsWith(rootPath)||!Files.isRegularFile(temp)) throw validation("release_upload_not_found");
+
+        validateZipPath(temp);
+        Path dir=Path.of(root,"storage","releases",String.valueOf(workspaceId),String.valueOf(productId),safe(version)).toAbsolutePath().normalize();
+        if(!dir.startsWith(rootPath)) throw new IllegalArgumentException("storage_path_outside_root");
+        Path out=dir.resolve(safe(fileName)).normalize();
+        if(!out.startsWith(dir)) throw new IllegalArgumentException("storage_path_outside_root");
+
+        try{
+            Files.createDirectories(dir);
+            try{
+                return Files.move(temp,out,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE).toAbsolutePath().toString();
+            }catch(AtomicMoveNotSupportedException ignored){
+                return Files.move(temp,out,StandardCopyOption.REPLACE_EXISTING).toAbsolutePath().toString();
+            }
+        }catch(IOException e){
+            throw new IllegalStateException("release_storage_failed",e);
+        }
+    }
+
+    public void discardReleaseUpload(long workspaceId,String token){
+        if(token==null||!token.matches("[0-9a-fA-F-]{36}")) return;
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path temp=Path.of(root,"storage","tmp","release-uploads",String.valueOf(workspaceId),token+".upload").toAbsolutePath().normalize();
+        if(!temp.startsWith(rootPath)) return;
+        try{Files.deleteIfExists(temp);}catch(IOException ignored){}
+    }
+
+    private void validateZipPath(Path path){
+        try(ZipInputStream zin=new ZipInputStream(Files.newInputStream(path))){
+            if(zin.getNextEntry()==null) throw validation("invalid_zip");
+        }catch(WebApplicationException e){
+            throw e;
+        }catch(IOException e){
+            throw validation("invalid_zip");
+        }
+    }
+
     public String saveRelease(long workspaceId,long productId,String version,String fileName,String fileBase64){
         if(fileBase64==null||fileBase64.isBlank()) throw validation("release_file_required");
         byte[] data;
@@ -60,6 +149,7 @@ public class StorageService {
         Path rootPath=Path.of(root).toAbsolutePath().normalize();
         Path releaseRoot=rootPath.resolve("storage").resolve("releases").normalize();
         Path moduleRoot=rootPath.resolve("storage").resolve("protection-modules").normalize();
+        Path uploadRoot=rootPath.resolve("storage").resolve("tmp").resolve("release-uploads").normalize();
 
         int missingReleaseRows=0;
         int missingModuleRows=0;
@@ -113,8 +203,10 @@ public class StorageService {
             )
           """);
 
+        int staleUploads=deleteStaleUploads(uploadRoot);
         deleteEmptyTreeDirectories(releaseRoot);
         deleteEmptyTreeDirectories(moduleRoot);
+        deleteEmptyTreeDirectories(uploadRoot);
 
         Map<String,Object> out=new LinkedHashMap<>();
         out.put("ok",true);
@@ -123,8 +215,27 @@ public class StorageService {
         out.put("orphan_release_files_removed",orphanReleaseFiles);
         out.put("orphan_module_files_removed",orphanModuleFiles);
         out.put("products_demoted_to_draft",demoted);
-        out.put("total_removed",missingReleaseRows+missingModuleRows+orphanReleaseFiles+orphanModuleFiles);
+        out.put("stale_release_uploads_removed",staleUploads);
+        out.put("total_removed",missingReleaseRows+missingModuleRows+orphanReleaseFiles+orphanModuleFiles+staleUploads);
         return out;
+    }
+
+    private int deleteStaleUploads(Path base){
+        if(base==null||!Files.exists(base)) return 0;
+        final int[] removed={0};
+        long cutoff=System.currentTimeMillis()-(24L*60L*60L*1000L);
+        try(var walk=Files.walk(base)){
+            walk.filter(Files::isRegularFile).forEach(p->{
+                try{
+                    if(Files.getLastModifiedTime(p).toMillis()<cutoff && Files.deleteIfExists(p)) removed[0]++;
+                }catch(IOException e){
+                    throw new UncheckedIOException(e);
+                }
+            });
+        }catch(IOException|UncheckedIOException e){
+            throw new IllegalStateException("storage_reconcile_failed",e);
+        }
+        return removed[0];
     }
 
     private int deleteUnreferencedFiles(Path base,Set<Path> referenced){
