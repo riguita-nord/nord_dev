@@ -494,7 +494,7 @@ function renderProductWorkspace(d){
       '<div class="split"><div class="field"><label>Name</label><input name="name" value="'+h(p.name)+'" required></div><div class="field"><label>Category</label><input name="category" value="'+h(p.category||'')+'"></div></div>'+
       '<div class="field"><label>Description</label><textarea name="description" rows="5">'+h(p.description||'')+'</textarea></div>'+
       '<div class="split"><div class="field"><label>Price cents</label><input name="price_cents" type="number" min="0" value="'+h(p.price_cents||0)+'"></div><div class="field"><label>Currency</label><select name="currency"><option '+(p.currency==='EUR'?'selected':'')+'>EUR</option><option '+(p.currency==='USD'?'selected':'')+'>USD</option><option '+(p.currency==='GBP'?'selected':'')+'>GBP</option></select></div></div>'+
-      '<div class="split"><div class="field"><label>Protection mode</label><select name="protection_mode"><option '+(p.protection_mode==='LICENSE_ONLY'?'selected':'')+'>LICENSE_ONLY</option><option '+(p.protection_mode==='NONE'?'selected':'')+'>NONE</option><option '+(p.protection_mode==='PROTECTED_BUILD'?'selected':'')+'>PROTECTED_BUILD</option></select></div><div class="field"><label>Status</label><select name="status"><option value="draft" '+(p.status==='draft'?'selected':'')+'>Draft</option><option value="published" '+(p.status==='published'?'selected':'')+'>Published</option></select></div></div>'+
+      '<div class="split"><div class="field"><label>Protection mode</label><select name="protection_mode"><option '+(p.protection_mode==='LICENSE_ONLY'?'selected':'')+'>LICENSE_ONLY</option><option '+(p.protection_mode==='NONE'?'selected':'')+'>NONE</option><option '+(p.protection_mode==='PROTECTED_BUILD'?'selected':'')+'>PROTECTED_BUILD</option></select></div><div class="field"><label>Status</label><div class="published-state"><i class="fa-solid fa-circle-check"></i><span><strong>Published</strong><small>Products with a published release stay published.</small></span></div><input type="hidden" name="status" value="published"></div></div>'+
       '<label class="product-check"><input name="license_required" type="checkbox" '+(p.license_required?'checked':'')+'> <span><strong>License required</strong><small>Require a valid Forge license at runtime.</small></span></label>'+
       '<div class="settings-actions"><button class="btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save product</button></div></form></div></section>'+
       '<section class="panel danger-zone product-danger"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently remove this product, releases and runtime data.</p></div><button class="btn danger" id="delete-product"><i class="fa-solid fa-trash"></i> Delete product</button></div></section></div>';
@@ -714,7 +714,15 @@ function renderProductProcessing(stateData){
   modalRoot.innerHTML=
     '<div class="modal-layer product-processing-layer">'+
       '<div class="product-processing-modal '+phase+'">'+
-        '<div class="product-processing-orbit"><div class="product-processing-core"><i class="fa-solid '+item[2]+'"></i></div><span></span><span></span><span></span></div>'+
+        '<div class="upload-transfer-visual '+phase+'">'+
+          '<div class="transfer-node transfer-pc"><div class="transfer-node-icon"><i class="fa-solid fa-desktop"></i></div><small>Your PC</small></div>'+
+          '<div class="transfer-route">'+
+            '<div class="transfer-line"></div>'+
+            '<div class="transfer-dots"><span></span><span></span><span></span></div>'+
+            '<div class="transfer-file"><i class="fa-solid fa-file-zipper"></i></div>'+
+          '</div>'+
+          '<div class="transfer-node transfer-server"><div class="transfer-node-icon"><i class="fa-solid fa-server"></i></div><small>Nord Forge</small></div>'+
+        '</div>'+
         '<div class="product-processing-kicker">Nord Forge</div>'+
         '<h2>'+h(item[0])+'</h2>'+
         '<p class="product-processing-copy">'+h(item[1])+'</p>'+
@@ -851,7 +859,7 @@ function createProduct(){
             '<aside class="product-create-preview">'+
               '<div class="product-preview-label">Live preview</div>'+
               '<article class="product-preview-card">'+
-                '<div class="product-preview-top"><div class="product-preview-icon"><i class="fa-solid '+categoryIcon()+'"></i></div><span class="pill warn">draft</span></div>'+
+                '<div class="product-preview-top"><div class="product-preview-icon"><i class="fa-solid '+categoryIcon()+'"></i></div><span class="pill good">published</span></div>'+
                 '<h3>'+h(draft.name||'Untitled product')+'</h3>'+
                 '<p>'+h(draft.description||'Your product description will appear here.')+'</p>'+
                 '<div class="product-preview-meta"><span><i class="fa-solid fa-tag"></i> '+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</span><span><i class="fa-solid '+protection[1]+'"></i> '+h(protection[2])+'</span><span><i class="fa-solid fa-code-branch"></i> v'+h(draft.release_version||'1.0.0')+'</span></div>'+
