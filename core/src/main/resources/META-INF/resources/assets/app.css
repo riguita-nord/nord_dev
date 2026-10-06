@@ -3357,3 +3357,22 @@
   max-height:none!important;
   border-radius:0!important;
 }
+
+/* Interactive NUI preview controls */
+.nui-zoom-label{
+  min-width:28px;
+  color:var(--muted);
+  font-size:7px;
+  font-weight:900;
+  text-align:center;
+}
+#nui-fit-ui.active{
+  background:var(--brand);
+  color:#fff;
+}
+.nui-preview-stage{
+  cursor:default;
+}
+.nui-preview-canvas{
+  transform-origin:center center!important;
+}
