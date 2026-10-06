@@ -20,7 +20,16 @@ async function boot(){
     if(wait)await new Promise(r=>setTimeout(r,wait));
     await dismissBootSplash();
     if(setup.needs_setup){renderSetup();return}
-    const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();renderShell();loadView()
+    const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();
+    let pending=null;try{pending=JSON.parse(localStorage.getItem('nf_workspace_provisioning')||'null')}catch(e){}
+    if(pending&&pending.id){
+      const w=state.workspaces.find(x=>String(x.id)===String(pending.id))||pending;
+      await runWorkspaceProvisioning(w);
+      await loadWorkspaces();
+      state.workspace=state.workspaces.find(x=>String(x.id)===String(pending.id))||null;
+      state.surface='dev';state.view='overview';
+    }
+    renderShell();loadView()
   }catch(e){
     const wait=Math.max(0,900-(Date.now()-started));if(wait)await new Promise(r=>setTimeout(r,wait));
     await dismissBootSplash();
@@ -239,7 +248,59 @@ if(state.view==='team'){setTitle('Team');const rows=await api('/workspaces/'+wid
 if(state.view==='infra'){setTitle('Infrastructure');const [nodes,keys,ints]=await Promise.all([api('/workspaces/'+wid+'/infra'),api('/workspaces/'+wid+'/api-keys'),api('/workspaces/'+wid+'/integrations')]);content('<div class="hero"><div><h1>Infrastructure</h1><p>External endpoints, scoped API keys and optional integrations.</p></div><div><button class="btn" id="infra-new">Add node</button> <button class="btn primary" id="key-new">Create API key</button></div></div><div class="panel"><div class="panel-head"><h2>Nodes</h2></div>'+table(nodes,[['name','Name'],['type','Type'],['url','URL'],['status','Status']])+'</div><div class="split"><div class="panel"><div class="panel-head"><h2>API keys</h2></div>'+table(keys,[['name','Name'],['prefix','Prefix'],['scopes','Scopes'],['created_at','Created']])+'</div><div class="panel"><div class="panel-head"><h2>Integrations</h2></div>'+table(ints,[['type','Type'],['enabled','Enabled'],['updated_at','Updated']])+'</div></div>');document.querySelector('#infra-new').onclick=addInfra;document.querySelector('#key-new').onclick=createApiKey;return}
 if(state.view==='audit'){setTitle('Audit');const rows=await api('/workspaces/'+wid+'/audit');return content('<div class="hero"><div><h1>Audit</h1><p>Workspace mutations and security-relevant actions.</p></div></div><div class="panel">'+table(rows,[['action','Action'],['display_name','Actor'],['target','Target'],['details','Details'],['created_at','Time']])+'</div>')}}
 function devProductCard(p){return '<article class="card"><h3>'+h(p.name)+'</h3><p>'+h(p.description||'No description.')+'</p><div class="meta"><span class="pill">'+h(p.category||'resource')+'</span><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span><span class="pill">'+h(p.protection_mode)+'</span></div><div style="margin-top:12px">'+(p.status!=='published'?'<button class="btn primary" data-publish="'+p.id+'">Publish</button>':'')+'</div></article>'}
-function createWorkspace(){modal('Create developer workspace','<form class="form"><div class="field"><label>Workspace name</label><input name="name" required placeholder="Nord Lab"></div></form>',async fd=>{const w=await api('/workspaces',{method:'POST',body:JSON.stringify({name:formVal(fd,'name')})});await loadWorkspaces();state.workspace=state.workspaces.find(x=>String(x.id)===String(w.id))||w;state.surface='dev';state.view='overview';renderShell();loadView();toast('Workspace created')})}
+function createWorkspace(){modal('Create developer workspace','<form class="form"><div class="field"><label>Workspace name</label><input name="name" required placeholder="Nord Lab"></div></form>',async fd=>{const w=await api('/workspaces',{method:'POST',body:JSON.stringify({name:formVal(fd,'name')})});modalRoot.innerHTML='';localStorage.setItem('nf_workspace_provisioning',JSON.stringify({id:w.id,name:w.name,started_at:Date.now()}));await runWorkspaceProvisioning(w);await loadWorkspaces();state.workspace=state.workspaces.find(x=>String(x.id)===String(w.id))||w;state.surface='dev';state.view='overview';renderShell();loadView();toast('Workspace ready')})}
+async function runWorkspaceProvisioning(workspace){
+  const total=5*60*1000;
+  let saved={id:workspace.id,name:workspace.name,started_at:Date.now()};
+  try{saved=JSON.parse(localStorage.getItem('nf_workspace_provisioning')||'null')||saved}catch(e){}
+  const started=Number(saved.started_at)||Date.now();
+  const stages=[
+    [0,'Creating workspace identity','fa-fingerprint'],
+    [18,'Preparing development environment','fa-code'],
+    [36,'Configuring licensing services','fa-key'],
+    [54,'Preparing releases and storage','fa-box-archive'],
+    [72,'Linking administration controls','fa-shield-halved'],
+    [88,'Finalizing workspace','fa-circle-check']
+  ];
+  app.innerHTML='<div class="workspace-provision">'+
+    '<div class="workspace-provision-grid"></div>'+
+    '<div class="workspace-provision-card">'+
+      '<div class="workspace-provision-brand"><div class="setup-logo"><i class="fa-solid fa-cube"></i></div><div><strong>NORD FORGE</strong><span>Workspace Provisioning</span></div></div>'+
+      '<div class="workspace-provision-spinner"><div class="workspace-provision-ring"></div><div class="workspace-provision-icon" id="workspace-provision-icon"><i class="fa-solid fa-fingerprint"></i></div></div>'+
+      '<div class="workspace-provision-copy"><div class="workspace-provision-kicker">Preparing '+h(workspace.name)+'</div><h1>Please wait while we prepare your workspace.</h1><p id="workspace-provision-status">Creating workspace identity</p></div>'+
+      '<div class="workspace-provision-progress"><span id="workspace-provision-bar"></span></div>'+
+      '<div class="workspace-provision-meta"><span id="workspace-provision-percent">0%</span><span id="workspace-provision-time">About 5 minutes remaining</span></div>'+
+      '<div class="workspace-provision-note"><i class="fa-solid fa-circle-info"></i><span>You can keep this tab open. If the page is refreshed, Forge will resume this preparation screen.</span></div>'+
+    '</div>'+
+  '</div>';
+
+  await new Promise(resolve=>{
+    const tick=()=>{
+      const elapsed=Math.max(0,Date.now()-started);
+      const progress=Math.min(100,(elapsed/total)*100);
+      const bar=document.querySelector('#workspace-provision-bar');
+      const pct=document.querySelector('#workspace-provision-percent');
+      const time=document.querySelector('#workspace-provision-time');
+      const status=document.querySelector('#workspace-provision-status');
+      const icon=document.querySelector('#workspace-provision-icon');
+      if(bar)bar.style.width=progress.toFixed(2)+'%';
+      if(pct)pct.textContent=Math.floor(progress)+'%';
+      const remain=Math.max(0,total-elapsed);
+      const mins=Math.ceil(remain/60000);
+      if(time)time.textContent=remain>0?(mins<=1?'Less than a minute remaining':'About '+mins+' minutes remaining'):'Workspace ready';
+      let current=stages[0];
+      for(const stage of stages)if(progress>=stage[0])current=stage;
+      if(status)status.textContent=current[1];
+      if(icon)icon.innerHTML='<i class="fa-solid '+current[2]+'"></i>';
+      if(progress>=100){
+        localStorage.removeItem('nf_workspace_provisioning');
+        setTimeout(resolve,700);
+      }else setTimeout(tick,500);
+    };
+    tick();
+  });
+}
+
 function createProduct(){modal('New product','<form class="form"><div class="field"><label>Name</label><input name="name" required></div><div class="field"><label>Category</label><input name="category" placeholder="inventory, housing, utility..."></div><div class="field"><label>Description</label><textarea name="description" rows="5"></textarea></div><div class="split"><div class="field"><label>Price cents</label><input name="price_cents" type="number" value="0"></div><div class="field"><label>Currency</label><select name="currency"><option>EUR</option><option>USD</option><option>GBP</option></select></div></div><div class="field"><label>Protection mode</label><select name="protection_mode"><option>LICENSE_ONLY</option><option>NONE</option><option>PROTECTED_BUILD</option></select></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({name:formVal(fd,'name'),category:formVal(fd,'category'),description:formVal(fd,'description'),price_cents:Number(formVal(fd,'price_cents')||0),currency:formVal(fd,'currency'),license_required:formVal(fd,'protection_mode')!=='NONE',protection_mode:formVal(fd,'protection_mode')})});toast('Product created');loadView()})}
 async function publishProduct(id){try{const products=await api('/workspaces/'+state.workspace.id+'/products');const p=products.find(x=>String(x.id)===String(id));await api('/products/'+id,{method:'PUT',body:JSON.stringify({name:p.name,description:p.description,category:p.category,price_cents:p.price_cents,currency:p.currency,license_required:p.license_required,protection_mode:p.protection_mode,status:'published'})});toast('Product published');loadView()}catch(e){toast(e.message)}}
 function createRelease(products){if(!products.length)return toast('Create a product first.');modal('Upload release','<form class="form"><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div><div class="field"><label>Version</label><input name="version" placeholder="2.0.0" required></div><div class="field"><label>ZIP file</label><input name="file" type="file" accept=".zip" required></div><div class="field"><label>Changelog</label><textarea name="changelog" rows="5"></textarea></div></form>',async fd=>{const file=fd.get('file');if(!file||!file.size)throw new Error('ZIP file required');const base64=await fileBase64(file);await api('/products/'+formVal(fd,'product_id')+'/releases',{method:'POST',body:JSON.stringify({version:formVal(fd,'version'),file_name:file.name,file_base64:base64,changelog:formVal(fd,'changelog'),published:true})});toast('Release uploaded');loadView()})}
