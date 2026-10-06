@@ -1,7 +1,7 @@
 (function(){
 const app=document.querySelector('#app'),modalRoot=document.querySelector('#modal-root');
 const state={me:null,csrf:null,surface:localStorage.getItem('nf_surface')||'client',view:'home',workspaces:[],workspace:null,theme:localStorage.getItem('nf_theme')||'dark',lang:localStorage.getItem('nf_lang')||'en'};
-const I={client:[['home','fa-house','Home'],['products','fa-box-open','My Products'],['licenses','fa-key','Licenses'],['keymasters','fa-fingerprint','Keymasters'],['marketplace','fa-store','Marketplace'],['purchases','fa-receipt','Purchases'],['support','fa-headset','Support'],['account','fa-user-gear','Account']],dev:[['overview','fa-chart-line','Overview'],['products','fa-cubes','Products'],['releases','fa-code-branch','Releases'],['licenses','fa-key','Licenses'],['protection','fa-shield-halved','Protection'],['purchases','fa-comments-dollar','Purchases'],['store','fa-shop','Store'],['docs','fa-book-open','Docs & Website'],['integrations','fa-plug','Integrations'],['team','fa-users','Team'],['infra','fa-server','Infrastructure'],['audit','fa-clock-rotate-left','Audit']]};
+const I={client:[['home','fa-house','Home'],['products','fa-box-open','My Products'],['licenses','fa-key','Licenses'],['keymasters','fa-fingerprint','Keymasters'],['marketplace','fa-store','Marketplace'],['purchases','fa-receipt','Purchases'],['support','fa-headset','Support'],['account','fa-user-gear','Account']],dev:[['overview','fa-chart-line','Overview'],['products','fa-cubes','Products'],['releases','fa-code-branch','Releases'],['licenses','fa-key','Licenses'],['protection','fa-shield-halved','Protection'],['purchases','fa-comments-dollar','Purchases'],['store','fa-shop','Store'],['docs','fa-book-open','Docs & Website'],['integrations','fa-plug','Integrations'],['team','fa-users','Team'],['infra','fa-server','Infrastructure'],['audit','fa-clock-rotate-left','Audit'],['settings','fa-gear','Settings']]};
 const h=v=>String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const money=(c,cur)=>new Intl.NumberFormat(undefined,{style:'currency',currency:cur||'EUR'}).format(Number(c||0)/100);
 async function api(path,opt){opt=opt||{};const headers={'Content-Type':'application/json',...(opt.headers||{})};if(state.csrf&&opt.method&&opt.method!=='GET')headers['X-CSRF-Token']=state.csrf;const r=await fetch('/api/v2'+path,{credentials:'same-origin',...opt,headers});if(r.status===401){state.me=null;renderAuth();throw new Error('unauthorized')}let data;try{data=await r.json()}catch(e){data={}}if(!r.ok)throw new Error(data.message||data.error||('HTTP '+r.status));return data}
@@ -337,16 +337,11 @@ if(state.view==='overview'){
               '<div><span>Members</span><strong>'+h(d.members)+'</strong></div>'+
             '</div>'+
           '</section>'+
-          '<section class="panel workspace-boundary-card">'+
-            '<div class="panel-body"><div class="workspace-boundary-icon"><i class="fa-solid fa-box"></i></div><h3>Scoped environment</h3><p>Products, releases, docs, integrations and audit stay isolated inside this workspace.</p></div>'+
-          '</section>'+
         '</aside>'+
       '</div>'+
-      (String(d.role)==='owner'?'<section class="panel danger-zone workspace-danger"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently delete this workspace and all scoped Forge data.</p></div><button class="btn danger" id="delete-workspace"><i class="fa-solid fa-trash"></i> Delete workspace</button></div></section>':'')+
     '</div>'
   );
   document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{state.view=b.dataset.jump;renderShell();loadView()});
-  if(document.querySelector('#delete-workspace'))document.querySelector('#delete-workspace').onclick=deleteCurrentWorkspace;
   return;
 }
 if(state.view==='products'){setTitle('Products');const rows=await api('/workspaces/'+wid+'/products');content('<div class="hero"><div><h1>Products</h1><p>Create drafts, configure licensing and publish only after a release exists.</p></div><button class="btn primary" id="product-new">New product</button></div><div class="cards">'+(rows.length?rows.map(devProductCard).join(''):empty('fa-cubes','No products','Create the first product in this workspace.'))+'</div>');document.querySelector('#product-new').onclick=createProduct;document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=()=>publishProduct(b.dataset.publish));return}
@@ -372,6 +367,58 @@ if(state.view==='docs'){setTitle('Docs & Website');const [docs,pages]=await Prom
 if(state.view==='integrations'){setTitle('Integrations');const [items,tebex,discord]=await Promise.all([api('/workspaces/'+wid+'/integrations'),api('/workspaces/'+wid+'/tebex'),api('/workspaces/'+wid+'/discord')]);content('<div class="hero"><div><h1>Integrations</h1><p>Commerce and community connections scoped to this workspace.</p></div></div><div class="cards"><article class="card"><h3><i class="fa-solid fa-cart-shopping"></i> Tebex</h3><p>Checkout handoff and signed entitlement webhook.</p><div class="meta"><span class="pill '+(tebex.enabled?'good':'')+'">'+(tebex.enabled?'enabled':'not configured')+'</span></div><div style="margin-top:12px"><button class="btn primary" id="tebex-config">Configure</button></div></article><article class="card"><h3><i class="fa-brands fa-discord"></i> Discord</h3><p>Guild resources, bot test messages and workspace connection.</p><div class="meta"><span class="pill '+(discord.enabled?'good':'')+'">'+(discord.enabled?'enabled':'not configured')+'</span></div><div style="margin-top:12px"><button class="btn" id="discord-config">Settings</button> <button class="btn primary" id="discord-connect">Connect</button></div></article></div><div class="panel" style="margin-top:14px"><div class="panel-head"><h2>Workspace integrations</h2></div>'+table(items,[['type','Type'],['enabled','Enabled'],['updated_at','Updated']])+'</div>');document.querySelector('#tebex-config').onclick=()=>configureTebex(tebex);document.querySelector('#discord-config').onclick=()=>configureDiscord(discord);document.querySelector('#discord-connect').onclick=connectDiscord;return}
 if(state.view==='team'){setTitle('Team');const rows=await api('/workspaces/'+wid+'/members');content('<div class="hero"><div><h1>Team</h1><p>Workspace access is independent from customer account access.</p></div><button class="btn primary" id="member-new">Add member</button></div><div class="panel">'+table(rows,[['display_name','Name'],['email','Email'],['role','Role'],['status','Status'],['created_at','Added']])+'</div>');document.querySelector('#member-new').onclick=addMember;return}
 if(state.view==='infra'){setTitle('Infrastructure');const [nodes,keys,ints]=await Promise.all([api('/workspaces/'+wid+'/infra'),api('/workspaces/'+wid+'/api-keys'),api('/workspaces/'+wid+'/integrations')]);content('<div class="hero"><div><h1>Infrastructure</h1><p>External endpoints, scoped API keys and optional integrations.</p></div><div><button class="btn" id="infra-new">Add node</button> <button class="btn primary" id="key-new">Create API key</button></div></div><div class="panel"><div class="panel-head"><h2>Nodes</h2></div>'+table(nodes,[['name','Name'],['type','Type'],['url','URL'],['status','Status']])+'</div><div class="split"><div class="panel"><div class="panel-head"><h2>API keys</h2></div>'+table(keys,[['name','Name'],['prefix','Prefix'],['scopes','Scopes'],['created_at','Created']])+'</div><div class="panel"><div class="panel-head"><h2>Integrations</h2></div>'+table(ints,[['type','Type'],['enabled','Enabled'],['updated_at','Updated']])+'</div></div>');document.querySelector('#infra-new').onclick=addInfra;document.querySelector('#key-new').onclick=createApiKey;return}
+if(state.view==='settings'){
+  setTitle('Workspace settings');
+  const s=await api('/workspaces/'+wid+'/settings');
+  content(
+    '<div class="workspace-settings-page">'+
+      '<div class="hero settings-hero"><div><div class="side-kicker">Workspace settings</div><h1>'+h(s.name)+'</h1><p>Manage workspace identity, defaults and lifecycle from one place.</p></div><span class="pill '+(s.status==='active'?'good':'warn')+'">'+h(s.status)+'</span></div>'+
+      '<div class="workspace-settings-grid">'+
+        '<section class="panel"><div class="panel-head"><div><h2>General</h2><p>Workspace identity used across Nord Forge.</p></div></div><div class="panel-body">'+
+          '<form id="workspace-settings-form" class="form">'+
+            '<div class="split">'+
+              '<div class="field"><label>Name</label><input name="name" value="'+h(s.name)+'" '+(!s.can_manage?'disabled':'')+'></div>'+
+              '<div class="field"><label>Slug</label><input name="slug" value="'+h(s.slug)+'" '+(!s.can_manage?'disabled':'')+'></div>'+
+            '</div>'+
+            '<div class="field"><label>Store name</label><input name="store_name" value="'+h(s.store_name||'')+'" '+(!s.can_manage?'disabled':'')+'></div>'+
+            '<div class="field"><label>Store description</label><textarea name="store_description" rows="4" '+(!s.can_manage?'disabled':'')+'>'+h(s.store_description||'')+'</textarea></div>'+
+            '<div class="split">'+
+              '<div class="field"><label>Currency</label><select name="store_currency" '+(!s.can_manage?'disabled':'')+'><option '+(s.store_currency==='EUR'?'selected':'')+'>EUR</option><option '+(s.store_currency==='USD'?'selected':'')+'>USD</option><option '+(s.store_currency==='GBP'?'selected':'')+'>GBP</option></select></div>'+
+              '<div class="field"><label>Theme</label><select name="store_theme" '+(!s.can_manage?'disabled':'')+'><option value="dark" '+(s.store_theme==='dark'?'selected':'')+'>Dark</option><option value="light" '+(s.store_theme==='light'?'selected':'')+'>Light</option></select></div>'+
+            '</div>'+
+            (s.can_manage?'<div class="settings-actions"><button class="btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save changes</button></div>':'')+
+          '</form>'+
+        '</div></section>'+
+        '<aside class="workspace-settings-side">'+
+          '<section class="panel"><div class="panel-head"><div><h2>Workspace details</h2><p>Current access and lifecycle information.</p></div></div><div class="workspace-status-list">'+
+            '<div><span>Role</span><strong>'+h(s.role)+'</strong></div>'+
+            '<div><span>Status</span><strong>'+h(s.status)+'</strong></div>'+
+            '<div><span>Workspace ID</span><strong>#'+h(s.id)+'</strong></div>'+
+            '<div><span>Created</span><strong>'+h(s.created_at)+'</strong></div>'+
+          '</div></section>'+
+        '</aside>'+
+      '</div>'+
+      (s.is_owner?'<section class="panel danger-zone settings-danger-zone"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently delete this workspace and all scoped Forge data.</p></div><button class="btn danger" id="delete-workspace"><i class="fa-solid fa-trash"></i> Delete workspace</button></div></section>':'')+
+    '</div>'
+  );
+  const form=document.querySelector('#workspace-settings-form');
+  if(form&&s.can_manage)form.onsubmit=async e=>{
+    e.preventDefault();
+    const fd=new FormData(form);
+    try{
+      const updated=await api('/workspaces/'+wid+'/settings',{method:'PUT',body:JSON.stringify({
+        name:formVal(fd,'name'),slug:formVal(fd,'slug'),store_name:formVal(fd,'store_name'),
+        store_description:formVal(fd,'store_description'),store_currency:formVal(fd,'store_currency'),store_theme:formVal(fd,'store_theme')
+      })});
+      await loadWorkspaces();
+      state.workspace=state.workspaces.find(w=>String(w.id)===String(wid))||state.workspace;
+      toast('Workspace settings saved');
+      renderShell();state.view='settings';loadView();
+    }catch(err){toast(err.message)}
+  };
+  if(document.querySelector('#delete-workspace'))document.querySelector('#delete-workspace').onclick=deleteCurrentWorkspace;
+  return;
+}
 if(state.view==='audit'){setTitle('Audit');const rows=await api('/workspaces/'+wid+'/audit');return content('<div class="hero"><div><h1>Audit</h1><p>Workspace mutations and security-relevant actions.</p></div></div><div class="panel">'+table(rows,[['action','Action'],['display_name','Actor'],['target','Target'],['details','Details'],['created_at','Time']])+'</div>')}
 state.view='overview';
 renderShell();
