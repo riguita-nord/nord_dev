@@ -236,15 +236,30 @@ install_files(){
 }
 
 health_check(){
-  local ok=0
-  for _ in $(seq 1 35); do
-    if curl -fsS http://127.0.0.1:8088/q/health/ready >/dev/null 2>&1 &&
-       curl -fsS http://127.0.0.1:8089/q/health/ready >/dev/null 2>&1; then
+  local ok=0 core_url admin_url
+  core_url="http://127.0.0.1:8088/api/v2/setup/status"
+  admin_url="http://127.0.0.1:8089/administration/api/health"
+
+  for _ in $(seq 1 45); do
+    if systemctl is-active --quiet nord-forge.service &&
+       systemctl is-active --quiet nord-forge-admin.service &&
+       curl -fsS --max-time 3 "$core_url" >/dev/null 2>&1 &&
+       curl -fsS --max-time 3 "$admin_url" >/dev/null 2>&1; then
       ok=1
       break
     fi
     sleep 1
   done
+
+  if [[ "$ok" -ne 1 ]]; then
+    warn "Application health verification failed."
+    warn "Core probe: $core_url"
+    curl -sS -i --max-time 3 "$core_url" 2>&1 | head -n 20 || true
+    warn "Administration probe: $admin_url"
+    curl -sS -i --max-time 3 "$admin_url" 2>&1 | head -n 20 || true
+    systemctl --no-pager --full status nord-forge.service nord-forge-admin.service || true
+  fi
+
   [[ "$ok" -eq 1 ]]
 }
 
