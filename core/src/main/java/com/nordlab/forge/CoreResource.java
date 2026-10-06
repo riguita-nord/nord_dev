@@ -3,7 +3,9 @@ package com.nordlab.forge;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -16,6 +18,8 @@ public class CoreResource {
     @Inject SecurityService security;
     @Inject ForgeService forge;
     @Inject StorageService storage;
+    @ConfigProperty(name="NORD_ADMIN_URL",defaultValue="/administration") String adminUrl;
+    @ConfigProperty(name="NORD_ADMIN_SSO_SECRET") String adminSsoSecret;
 
     private Map<String,Object> user(String session){ return security.requireUser(session); }
     private long uid(String session){ return forge.userId(user(session)); }
@@ -46,6 +50,17 @@ public class CoreResource {
     }
     @POST @Path("/auth/logout")
     public Response logout(@CookieParam("NF_SESSION") String session){ security.logout(session); return Response.ok(Map.of("ok",true)).header("Set-Cookie",security.clearCookie()).build(); }
+
+    @GET @Path("/admin/launch")
+    public Response adminLaunch(@CookieParam("NF_SESSION") String session){
+        Map<String,Object> u=security.requireUser(session);
+        if(!Boolean.TRUE.equals(u.get("platform_owner"))) throw new ForbiddenException("platform_owner_required");
+        long exp=Instant.now().plusSeconds(90).getEpochSecond();
+        String payload=u.get("id")+":"+Base64.getUrlEncoder().withoutPadding().encodeToString(String.valueOf(u.get("email")).getBytes(StandardCharsets.UTF_8))+":"+exp;
+        String enc=Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        String sig=security.hmac(adminSsoSecret,enc);
+        return ok(Map.of("ok",true,"url",adminUrl+"/?token="+enc+"."+sig));
+    }
     @GET @Path("/me")
     public Response me(@CookieParam("NF_SESSION") String session){
         Map<String,Object> u=user(session); return ok(Map.of("ok",true,"user",u,"csrf",u.get("csrf_token")));
