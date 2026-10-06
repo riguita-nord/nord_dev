@@ -3434,3 +3434,34 @@
     min-width:145px;
   }
 }
+
+/* Final NUI preview geometry: iframe is the viewport, never larger than the stage */
+.nui-builder-preview-area{
+  overflow:hidden!important;
+  padding:10px!important;
+}
+.nui-preview-stage{
+  position:relative!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  display:block!important;
+}
+.nui-preview-stage>iframe{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  max-width:100%!important;
+  max-height:100%!important;
+  border:0!important;
+  transform:none!important;
+  transform-origin:center center!important;
+  background:transparent!important;
+}
+.nui-preview-canvas{
+  display:contents!important;
+}
