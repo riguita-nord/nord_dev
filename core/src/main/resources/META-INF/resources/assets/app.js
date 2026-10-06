@@ -1,7 +1,7 @@
 (function(){
 const app=document.querySelector('#app'),modalRoot=document.querySelector('#modal-root');
-const state={me:null,csrf:null,surface:localStorage.getItem('nf_surface')||'client',view:'home',workspaces:[],workspace:null,theme:localStorage.getItem('nf_theme')||'dark',lang:localStorage.getItem('nf_lang')||'en'};
-const I={client:[['home','fa-house','Home'],['products','fa-box-open','My Products'],['licenses','fa-key','Licenses'],['keymasters','fa-fingerprint','Keymasters'],['marketplace','fa-store','Marketplace'],['purchases','fa-receipt','Purchases'],['support','fa-headset','Support'],['account','fa-user-gear','Account']],dev:[['overview','fa-chart-line','Overview'],['products','fa-cubes','Products'],['releases','fa-code-branch','Releases'],['licenses','fa-key','Licenses'],['protection','fa-shield-halved','Protection'],['purchases','fa-comments-dollar','Purchases'],['store','fa-shop','Store'],['docs','fa-book-open','Docs & Website'],['integrations','fa-plug','Integrations'],['team','fa-users','Team'],['infra','fa-server','Infrastructure'],['audit','fa-clock-rotate-left','Audit'],['settings','fa-gear','Settings']]};
+const state={me:null,csrf:null,surface:localStorage.getItem('nf_surface')||'client',view:'home',workspaces:[],workspace:null,productId:null,productTab:'overview',theme:localStorage.getItem('nf_theme')||'dark',lang:localStorage.getItem('nf_lang')||'en'};
+const I={client:[['home','fa-house','Home'],['products','fa-box-open','My Products'],['licenses','fa-key','Licenses'],['keymasters','fa-fingerprint','Keymasters'],['marketplace','fa-store','Marketplace'],['purchases','fa-receipt','Purchases'],['support','fa-headset','Support'],['account','fa-user-gear','Account']],dev:[['overview','fa-chart-line','Overview'],['products','fa-cubes','Products'],['purchases','fa-comments-dollar','Purchases'],['store','fa-shop','Store'],['docs','fa-book-open','Docs & Website'],['integrations','fa-plug','Integrations'],['team','fa-users','Team'],['infra','fa-server','Infrastructure'],['audit','fa-clock-rotate-left','Audit'],['settings','fa-gear','Settings']]};
 const h=v=>String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const money=(c,cur)=>new Intl.NumberFormat(undefined,{style:'currency',currency:cur||'EUR'}).format(Number(c||0)/100);
 async function api(path,opt){opt=opt||{};const headers={'Content-Type':'application/json',...(opt.headers||{})};if(state.csrf&&opt.method&&opt.method!=='GET')headers['X-CSRF-Token']=state.csrf;const r=await fetch('/api/v2'+path,{credentials:'same-origin',...opt,headers});if(r.status===401){state.me=null;renderAuth();throw new Error('unauthorized')}let data;try{data=await r.json()}catch(e){data={}}if(!r.ok)throw new Error(data.message||data.error||('HTTP '+r.status));return data}
@@ -242,7 +242,7 @@ function renderShell(){
   '</div>';
   document.querySelectorAll('[data-surface]').forEach(b=>b.onclick=()=>switchSurface(b.dataset.surface));
   document.querySelectorAll('[data-workspace-rail]').forEach(b=>b.onclick=()=>openWorkspaceFromRail(b.dataset.workspaceRail));
-  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderShell();loadView()});
+  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;if(state.view==='products'){state.productId=null;state.productTab='overview'}else{state.productId=null}renderShell();loadView()});
   document.querySelector('#rail-add-workspace').onclick=createWorkspace;
   if(document.querySelector('#admin-launch'))document.querySelector('#admin-launch').onclick=launchAdmin;
   document.querySelector('#theme').onclick=toggleTheme;
@@ -251,7 +251,7 @@ function renderShell(){
 function openWorkspaceFromRail(id){
   const w=state.workspaces.find(x=>String(x.id)===String(id));
   if(!w)return;
-  state.workspace=w;state.surface='dev';state.view='overview';
+  state.workspace=w;state.surface='dev';state.view='overview';state.productId=null;state.productTab='overview';
   localStorage.setItem('nf_surface','dev');
   renderShell();loadView();
 }
@@ -311,7 +311,7 @@ if(state.view==='overview'){
       '</section>'+
       '<section class="workspace-kpis">'+
         '<button class="workspace-kpi" data-jump="products"><i class="fa-solid fa-cubes"></i><div><span>Products</span><strong>'+h(d.products)+'</strong><small>'+h(d.published_products)+' published</small></div></button>'+
-        '<button class="workspace-kpi" data-jump="licenses"><i class="fa-solid fa-key"></i><div><span>Licenses</span><strong>'+h(d.licenses)+'</strong><small>Active runtime licenses</small></div></button>'+
+        '<button class="workspace-kpi" data-jump="products"><i class="fa-solid fa-key"></i><div><span>Licenses</span><strong>'+h(d.licenses)+'</strong><small>Active runtime licenses</small></div></button>'+
         '<button class="workspace-kpi" data-jump="team"><i class="fa-solid fa-users"></i><div><span>Members</span><strong>'+h(d.members)+'</strong><small>Workspace team</small></div></button>'+
         '<button class="workspace-kpi" data-jump="purchases"><i class="fa-solid fa-comments-dollar"></i><div><span>Open work</span><strong>'+h(Number(d.open_support||0)+Number(d.open_purchases||0))+'</strong><small>'+h(d.open_support)+' support · '+h(d.open_purchases)+' purchases</small></div></button>'+
       '</section>'+
@@ -320,8 +320,8 @@ if(state.view==='overview'){
           '<div class="panel-head"><div><h2>Workspace operations</h2><p>Jump directly into the areas you use most.</p></div></div>'+
           '<div class="workspace-quick-grid">'+
             '<button data-jump="products"><i class="fa-solid fa-cubes"></i><span><strong>Products</strong><small>Catalog and publishing</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
-            '<button data-jump="releases"><i class="fa-solid fa-code-branch"></i><span><strong>Releases</strong><small>Versions and artifacts</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
-            '<button data-jump="protection"><i class="fa-solid fa-shield-halved"></i><span><strong>Protection</strong><small>Runtime security</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="products"><i class="fa-solid fa-code-branch"></i><span><strong>Releases</strong><small>Versions and artifacts</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="products"><i class="fa-solid fa-shield-halved"></i><span><strong>Protection</strong><small>Runtime security</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
             '<button data-jump="integrations"><i class="fa-solid fa-plug"></i><span><strong>Integrations</strong><small>External services</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
             '<button data-jump="docs"><i class="fa-solid fa-book-open"></i><span><strong>Docs & Website</strong><small>Documentation and pages</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
             '<button data-jump="infra"><i class="fa-solid fa-server"></i><span><strong>Infrastructure</strong><small>Nodes and API access</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
@@ -344,23 +344,25 @@ if(state.view==='overview'){
   document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{state.view=b.dataset.jump;renderShell();loadView()});
   return;
 }
-if(state.view==='products'){setTitle('Products');const rows=await api('/workspaces/'+wid+'/products');content('<div class="hero"><div><h1>Products</h1><p>Create drafts, configure licensing and publish only after a release exists.</p></div><button class="btn primary" id="product-new">New product</button></div><div class="cards">'+(rows.length?rows.map(devProductCard).join(''):empty('fa-cubes','No products','Create the first product in this workspace.'))+'</div>');document.querySelector('#product-new').onclick=createProduct;document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=()=>publishProduct(b.dataset.publish));return}
-if(state.view==='releases'){
-  setTitle('Releases');
-  const [products,all]=await Promise.all([
-    api('/workspaces/'+wid+'/products'),
-    api('/workspaces/'+wid+'/releases')
-  ]);
-  content('<div class="hero"><div><h1>Releases</h1><p>Versions, artifacts and publication state for this workspace.</p></div><button class="btn primary" id="release-new" '+(!products.length?'disabled':'')+'><i class="fa-solid fa-cloud-arrow-up"></i> Upload release</button></div>'+
-    '<div class="panel"><div class="panel-head"><div><h2>Workspace releases</h2><p>'+all.length+' release'+(all.length===1?'':'s')+' across '+products.length+' product'+(products.length===1?'':'s')+'.</p></div></div>'+
-    table(all,[['product_name','Product'],['version','Version'],['file_name','File'],['published','Published'],['created_at','Created']])+
-    '</div>'+
-    (!products.length?'<div class="notice"><i class="fa-solid fa-circle-info"></i> Create a product before uploading a release.</div>':''));
-  const btn=document.querySelector('#release-new');if(btn&&!btn.disabled)btn.onclick=()=>createRelease(products);
+if(state.view==='products'){
+  if(state.productId){
+    setTitle('Product');
+    const d=await api('/products/'+state.productId+'/workspace');
+    return renderProductWorkspace(d);
+  }
+  setTitle('Products');
+  const rows=await api('/workspaces/'+wid+'/products');
+  content(
+    '<div class="product-catalog">'+
+      '<div class="hero product-catalog-hero"><div><div class="side-kicker">Product catalog</div><h1>Products</h1><p>Manage each product, its releases, licensing and runtime protection from one place.</p></div><button class="btn primary" id="product-new"><i class="fa-solid fa-plus"></i> New product</button></div>'+
+      (rows.length?'<div class="product-catalog-grid">'+rows.map(devProductCard).join('')+'</div>':empty('fa-cubes','No products','Create the first product in this workspace.'))+
+    '</div>'
+  );
+  document.querySelector('#product-new').onclick=createProduct;
+  document.querySelectorAll('[data-manage-product]').forEach(b=>b.onclick=()=>openProductWorkspace(b.dataset.manageProduct));
+  document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=e=>{e.stopPropagation();publishProduct(b.dataset.publish)});
   return;
 }
-if(state.view==='licenses'){setTitle('Workspace licenses');const rows=await api('/workspaces/'+wid+'/licenses');content('<div class="hero"><div><h1>Licenses</h1><p>Grant, revoke and limit runtime licenses.</p></div><button class="btn primary" id="license-new">Grant license</button></div><div class="panel">'+table(rows,[['product_name','Product'],['email','Customer'],['license_key','License key'],['server_limit','Servers'],['status','Status']])+'</div>');document.querySelector('#license-new').onclick=grantLicense;return}
-if(state.view==='protection'){setTitle('Runtime protection');const [products,installs]=await Promise.all([api('/workspaces/'+wid+'/products'),api('/workspaces/'+wid+'/protection/installations')]);content('<div class="hero"><div><h1>Runtime Protection</h1><p>Protection policies, signed build identities, fingerprints, heartbeat sessions and streamed modules.</p></div><button class="btn primary" id="protection-config">Configure product</button></div>'+metrics([['Products',products.length,'Workspace catalog'],['Installations',installs.length,'Known runtime installs'],['Active installs',installs.filter(x=>x.status==='active').length,'Not revoked']])+'<div class="panel"><div class="panel-head"><div><h2>Installations</h2><p>Latest protected runtime identities.</p></div></div>'+table(installs,[['product_name','Product'],['user_email','Customer'],['resource_id','Resource'],['version','Version'],['status','Status'],['last_seen_at','Last heartbeat']])+'</div>');document.querySelector('#protection-config').onclick=()=>configureProtection(products);return}
 if(state.view==='purchases'){setTitle('Purchase inbox');const rows=await api('/workspaces/'+wid+'/purchases');content('<div class="hero"><div><h1>Purchases</h1><p>Manual checkout requests and customer conversations.</p></div></div><div class="panel">'+table(rows,[['product_name','Product'],['buyer_email','Buyer'],['provider','Provider'],['status','Status'],['created_at','Created']])+'</div>');return}
 if(state.view==='store'){setTitle('Store');const s=await api('/workspaces/'+wid+'/store');content('<div class="hero"><div><h1>'+h(s.store_name||s.name)+'</h1><p>Public storefront identity and workspace presentation.</p></div><div><button class="btn" id="store-preview"><i class="fa-solid fa-arrow-up-right-from-square"></i> Preview</button> <button class="btn primary" id="store-edit">Edit store</button></div></div><div class="split"><div class="panel"><div class="panel-head"><h2>Store identity</h2></div><div class="panel-body"><div class="field"><label>Slug</label><input value="'+h(s.slug)+'" disabled></div><div class="field" style="margin-top:10px"><label>Currency</label><input value="'+h(s.store_currency)+'" disabled></div><div class="field" style="margin-top:10px"><label>Theme</label><input value="'+h(s.store_theme)+'" disabled></div></div></div><div class="panel"><div class="panel-head"><h2>Description</h2></div><div class="panel-body"><p style="color:var(--muted);line-height:1.7">'+h(s.store_description||'No store description yet.')+'</p></div></div></div>');document.querySelector('#store-edit').onclick=()=>editStore(s);document.querySelector('#store-preview').onclick=()=>window.open('/store.html?slug='+encodeURIComponent(s.slug),'_blank','noopener');return}
 if(state.view==='docs'){setTitle('Docs & Website');const [docs,pages]=await Promise.all([api('/workspaces/'+wid+'/docs'),api('/workspaces/'+wid+'/pages')]);content('<div class="hero"><div><h1>Docs & Website</h1><p>Documentation and public page content live in the same workspace.</p></div><div><button class="btn" id="doc-new">New doc</button> <button class="btn primary" id="page-new">New page</button></div></div><div class="split"><div class="panel"><div class="panel-head"><h2>Documentation</h2></div>'+table(docs,[['title','Title'],['slug','Slug'],['published','Published'],['updated_at','Updated']])+'</div><div class="panel"><div class="panel-head"><h2>Website pages</h2></div>'+table(pages,[['title','Title'],['slug','Slug'],['theme','Theme'],['published','Published']])+'</div></div>');document.querySelector('#doc-new').onclick=createDoc;document.querySelector('#page-new').onclick=createPage;return}
@@ -424,7 +426,107 @@ state.view='overview';
 renderShell();
 return loadView();
 }
-function devProductCard(p){return '<article class="card"><h3>'+h(p.name)+'</h3><p>'+h(p.description||'No description.')+'</p><div class="meta"><span class="pill">'+h(p.category||'resource')+'</span><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span><span class="pill">'+h(p.protection_mode)+'</span></div><div style="margin-top:12px">'+(p.status!=='published'?'<button class="btn primary" data-publish="'+p.id+'">Publish</button>':'')+'</div></article>'}
+function devProductCard(p){
+  return '<article class="product-catalog-card" data-manage-product="'+p.id+'">'+
+    '<div class="product-card-top"><div class="product-card-icon"><i class="fa-solid fa-cube"></i></div><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span></div>'+
+    '<h3>'+h(p.name)+'</h3><p>'+h(p.description||'No description yet.')+'</p>'+
+    '<div class="product-card-meta"><span><i class="fa-solid fa-tag"></i> '+h(p.category||'resource')+'</span><span><i class="fa-solid fa-shield-halved"></i> '+h(p.protection_mode||'LICENSE_ONLY')+'</span></div>'+
+    '<div class="product-card-foot"><strong>'+money(p.price_cents,p.currency)+'</strong><div class="product-card-actions">'+(p.status!=='published'?'<button class="btn" data-publish="'+p.id+'">Publish</button>':'')+'<button class="btn primary" data-manage-product="'+p.id+'">Manage <i class="fa-solid fa-arrow-right"></i></button></div></div>'+
+  '</article>';
+}
+function openProductWorkspace(id){
+  state.productId=Number(id);state.productTab='overview';state.view='products';renderShell();loadView();
+}
+function productTabs(){
+  const tabs=[['overview','fa-chart-line','Overview'],['releases','fa-code-branch','Releases'],['licensing','fa-key','Licensing'],['protection','fa-shield-halved','Protection'],['settings','fa-gear','Settings']];
+  return '<div class="product-tabs">'+tabs.map(t=>'<button class="'+(state.productTab===t[0]?'active':'')+'" data-product-tab="'+t[0]+'"><i class="fa-solid '+t[1]+'"></i> '+t[2]+'</button>').join('')+'</div>';
+}
+function renderProductWorkspace(d){
+  const p=d.product,releases=d.releases||[],licenses=d.licenses||[],installs=d.installations||[],protection=d.protection||{},builds=d.builds||[];
+  setTitle(p.name);
+  let body='';
+  if(state.productTab==='overview'){
+    const latest=releases[0];
+    body=
+      '<div class="product-workspace-kpis">'+
+        '<div><span>Latest release</span><strong>'+(latest?h(latest.version):'—')+'</strong><small>'+(latest?h(latest.created_at):'No releases yet')+'</small></div>'+
+        '<div><span>Active licenses</span><strong>'+h(d.active_licenses||0)+'</strong><small>'+h(d.entitlements||0)+' entitlements</small></div>'+
+        '<div><span>Installations</span><strong>'+h(d.active_installations||0)+'</strong><small>'+h(installs.length)+' known installs</small></div>'+
+        '<div><span>Protection</span><strong>'+h(protection.protection_level||'Not configured')+'</strong><small>'+h(p.protection_mode||'LICENSE_ONLY')+'</small></div>'+
+      '</div>'+
+      '<div class="product-workspace-grid"><section class="panel"><div class="panel-head"><div><h2>Product activity</h2><p>Recent releases and product state.</p></div></div><div class="product-summary-list">'+
+        '<div><span>Status</span><strong>'+h(p.status)+'</strong></div><div><span>Category</span><strong>'+h(p.category||'resource')+'</strong></div><div><span>Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div><div><span>Purchases</span><strong>'+h(d.purchases||0)+'</strong></div>'+
+      '</div></section>'+
+      '<section class="panel"><div class="panel-head"><div><h2>Quick actions</h2><p>Continue managing this product.</p></div></div><div class="product-action-list">'+
+        '<button data-product-tab="releases"><i class="fa-solid fa-cloud-arrow-up"></i><span><strong>Upload release</strong><small>Publish a new product version</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+        '<button data-product-tab="licensing"><i class="fa-solid fa-key"></i><span><strong>Manage licensing</strong><small>Grant and revoke customer access</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+        '<button data-product-tab="protection"><i class="fa-solid fa-shield-halved"></i><span><strong>Runtime protection</strong><small>Configure builds and installations</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+      '</div></section></div>';
+  }else if(state.productTab==='releases'){
+    body='<section class="panel"><div class="panel-head"><div><h2>Releases</h2><p>Versions, ZIP artifacts and publication state.</p></div><button class="btn primary" id="product-release-new"><i class="fa-solid fa-cloud-arrow-up"></i> Upload release</button></div>'+
+      (releases.length?'<div class="product-data-list">'+releases.map(r=>'<div class="product-data-row"><div class="product-data-main"><i class="fa-solid fa-code-branch"></i><div><strong>v'+h(r.version)+'</strong><span>'+h(r.file_name||'No file')+' · '+h(r.created_at)+'</span></div></div><div class="product-data-actions"><span class="pill '+(r.published?'good':'')+'">'+(r.published?'published':'draft')+'</span><a class="btn" href="/api/v2/releases/'+r.id+'/direct-download"><i class="fa-solid fa-download"></i></a><button class="btn danger" data-delete-release="'+r.id+'"><i class="fa-solid fa-trash"></i></button></div></div>').join('')+'</div>':empty('fa-code-branch','No releases','Upload the first release for this product.'))+
+      '</section>';
+  }else if(state.productTab==='licensing'){
+    body='<section class="panel"><div class="panel-head"><div><h2>Licensing</h2><p>Customer licenses scoped to '+h(p.name)+'.</p></div><button class="btn primary" id="product-license-new"><i class="fa-solid fa-plus"></i> Grant license</button></div>'+
+      (licenses.length?'<div class="product-data-list">'+licenses.map(l=>'<div class="product-data-row"><div class="product-data-main"><i class="fa-solid fa-key"></i><div><strong>'+h(l.display_name||l.email)+'</strong><span>'+h(l.email)+' · '+h(l.license_key)+'</span></div></div><div class="product-data-actions"><span class="pill '+(l.status==='active'?'good':'warn')+'">'+h(l.status)+'</span><span class="product-limit">'+h(l.server_limit)+' server'+(Number(l.server_limit)===1?'':'s')+'</span>'+(l.status==='active'?'<button class="btn danger" data-revoke-license="'+l.id+'" data-limit="'+l.server_limit+'"><i class="fa-solid fa-ban"></i> Revoke</button>':'')+'</div></div>').join('')+'</div>':empty('fa-key','No licenses','Grant the first customer license for this product.'))+
+      '</section>';
+  }else if(state.productTab==='protection'){
+    body='<div class="product-workspace-grid"><section class="panel"><div class="panel-head"><div><h2>Protection policy</h2><p>Runtime validation and build identity.</p></div><button class="btn primary" id="product-protection-config"><i class="fa-solid fa-sliders"></i> Configure</button></div><div class="product-summary-list">'+
+      '<div><span>Level</span><strong>'+h(protection.protection_level||'Not configured')+'</strong></div><div><span>Heartbeat</span><strong>'+h(protection.heartbeat_interval_seconds||'—')+'</strong></div><div><span>Fingerprint</span><strong>'+(protection.fingerprint_binding===true?'Bound':'—')+'</strong></div><div><span>Builds</span><strong>'+h(builds.length)+'</strong></div>'+
+      '</div></section><section class="panel"><div class="panel-head"><div><h2>Installations</h2><p>Known runtime installations for this product.</p></div></div>'+
+      (installs.length?'<div class="product-data-list compact">'+installs.map(i=>'<div class="product-data-row"><div class="product-data-main"><i class="fa-solid fa-server"></i><div><strong>'+h(i.resource_id||'Runtime')+'</strong><span>'+h(i.user_email||'')+' · '+h(i.version||'—')+'</span></div></div><div class="product-data-actions"><span class="pill '+(i.status==='active'?'good':'warn')+'">'+h(i.status)+'</span>'+(i.status==='active'?'<button class="btn danger" data-revoke-install="'+h(i.installation_id)+'"><i class="fa-solid fa-ban"></i></button>':'')+'</div></div>').join('')+'</div>':empty('fa-server','No installations','Protected runtime installations will appear here.'))+
+      '</section></div>';
+  }else if(state.productTab==='settings'){
+    body='<div class="product-settings-grid"><section class="panel"><div class="panel-head"><div><h2>Product settings</h2><p>Identity, commerce and runtime behavior.</p></div></div><div class="panel-body"><form class="form" id="product-settings-form">'+
+      '<div class="split"><div class="field"><label>Name</label><input name="name" value="'+h(p.name)+'" required></div><div class="field"><label>Category</label><input name="category" value="'+h(p.category||'')+'"></div></div>'+
+      '<div class="field"><label>Description</label><textarea name="description" rows="5">'+h(p.description||'')+'</textarea></div>'+
+      '<div class="split"><div class="field"><label>Price cents</label><input name="price_cents" type="number" min="0" value="'+h(p.price_cents||0)+'"></div><div class="field"><label>Currency</label><select name="currency"><option '+(p.currency==='EUR'?'selected':'')+'>EUR</option><option '+(p.currency==='USD'?'selected':'')+'>USD</option><option '+(p.currency==='GBP'?'selected':'')+'>GBP</option></select></div></div>'+
+      '<div class="split"><div class="field"><label>Protection mode</label><select name="protection_mode"><option '+(p.protection_mode==='LICENSE_ONLY'?'selected':'')+'>LICENSE_ONLY</option><option '+(p.protection_mode==='NONE'?'selected':'')+'>NONE</option><option '+(p.protection_mode==='PROTECTED_BUILD'?'selected':'')+'>PROTECTED_BUILD</option></select></div><div class="field"><label>Status</label><select name="status"><option value="draft" '+(p.status==='draft'?'selected':'')+'>Draft</option><option value="published" '+(p.status==='published'?'selected':'')+'>Published</option></select></div></div>'+
+      '<label class="product-check"><input name="license_required" type="checkbox" '+(p.license_required?'checked':'')+'> <span><strong>License required</strong><small>Require a valid Forge license at runtime.</small></span></label>'+
+      '<div class="settings-actions"><button class="btn primary" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save product</button></div></form></div></section>'+
+      '<section class="panel danger-zone product-danger"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently remove this product, releases and runtime data.</p></div><button class="btn danger" id="delete-product"><i class="fa-solid fa-trash"></i> Delete product</button></div></section></div>';
+  }
+  content('<div class="product-workspace"><header class="product-workspace-head"><button class="product-back" id="product-back"><i class="fa-solid fa-arrow-left"></i></button><div class="product-workspace-mark"><i class="fa-solid fa-cube"></i></div><div class="product-workspace-title"><div class="side-kicker">Product workspace</div><h1>'+h(p.name)+'</h1><div class="product-workspace-meta"><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span><span>'+h(p.category||'resource')+'</span><span>'+money(p.price_cents,p.currency)+'</span></div></div></header>'+productTabs()+'<div class="product-tab-body">'+body+'</div></div>');
+  document.querySelector('#product-back').onclick=()=>{state.productId=null;state.productTab='overview';loadView()};
+  document.querySelectorAll('[data-product-tab]').forEach(b=>b.onclick=()=>{state.productTab=b.dataset.productTab;loadView()});
+  const releaseNew=document.querySelector('#product-release-new');if(releaseNew)releaseNew.onclick=()=>createRelease([p]);
+  document.querySelectorAll('[data-delete-release]').forEach(b=>b.onclick=()=>deleteProductRelease(b.dataset.deleteRelease));
+  const licenseNew=document.querySelector('#product-license-new');if(licenseNew)licenseNew.onclick=()=>grantProductLicense(p.id);
+  document.querySelectorAll('[data-revoke-license]').forEach(b=>b.onclick=()=>revokeProductLicense(b.dataset.revokeLicense,b.dataset.limit));
+  const protect=document.querySelector('#product-protection-config');if(protect)protect.onclick=()=>configureProductProtection(p,protection);
+  document.querySelectorAll('[data-revoke-install]').forEach(b=>b.onclick=()=>revokeProductInstallation(b.dataset.revokeInstall));
+  const settings=document.querySelector('#product-settings-form');if(settings)settings.onsubmit=e=>saveProductSettings(e,p);
+  const del=document.querySelector('#delete-product');if(del)del.onclick=()=>deleteCurrentProduct(p);
+}
+async function deleteProductRelease(id){
+  try{await api('/releases/'+id,{method:'DELETE',body:'{}'});toast('Release deleted');loadView()}catch(e){toast(e.message)}
+}
+function grantProductLicense(pid){
+  modal('Grant product license','<form class="form"><div class="field"><label>Customer email</label><input name="email" type="email" required></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/licenses',{method:'POST',body:JSON.stringify({email:formVal(fd,'email'),product_id:Number(pid)})});toast('License granted');loadView()});
+}
+async function revokeProductLicense(id,limit){
+  try{await api('/workspaces/'+state.workspace.id+'/licenses/'+id,{method:'PUT',body:JSON.stringify({status:'revoked',server_limit:Number(limit||1)})});toast('License revoked');loadView()}catch(e){toast(e.message)}
+}
+function configureProductProtection(p,current){
+  modal('Protection policy','<form class="form"><div class="field"><label>Protection level</label><select name="protection_level"><option '+(current.protection_level==='standard'?'selected':'')+'>standard</option><option '+(current.protection_level==='protected'?'selected':'')+'>protected</option><option '+(current.protection_level==='streamed'?'selected':'')+'>streamed</option></select></div><div class="split"><div class="field"><label>Heartbeat seconds</label><input name="heartbeat_interval_seconds" type="number" value="'+h(current.heartbeat_interval_seconds||300)+'" min="30" max="3600"></div><div class="field"><label>Grace period</label><input name="grace_period_seconds" type="number" value="'+h(current.grace_period_seconds||900)+'" min="0" max="86400"></div></div><div class="split"><div class="field"><label>Session TTL</label><input name="session_ttl_seconds" type="number" value="'+h(current.session_ttl_seconds||300)+'" min="60" max="3600"></div><div class="field"><label>Minimum version</label><input name="minimum_version" value="'+h(current.minimum_version||'')+'" placeholder="2.0.0"></div></div><label class="product-check"><input name="fingerprint_binding" type="checkbox" value="true" '+(current.fingerprint_binding!==false?'checked':'')+'><span><strong>Fingerprint binding</strong></span></label><label class="product-check"><input name="integrity_validation" type="checkbox" value="true" '+(current.integrity_validation!==false?'checked':'')+'><span><strong>Integrity validation</strong></span></label></form>',async fd=>{await api('/products/'+p.id+'/protection',{method:'PUT',body:JSON.stringify({protection_level:formVal(fd,'protection_level'),heartbeat_interval_seconds:Number(formVal(fd,'heartbeat_interval_seconds')),grace_period_seconds:Number(formVal(fd,'grace_period_seconds')),session_ttl_seconds:Number(formVal(fd,'session_ttl_seconds')),minimum_version:formVal(fd,'minimum_version'),fingerprint_binding:fd.get('fingerprint_binding')==='true',integrity_validation:fd.get('integrity_validation')==='true',heartbeat_enabled:true,watermarking_enabled:true})});toast('Protection updated');loadView()});
+}
+async function revokeProductInstallation(id){
+  try{await api('/protection/installations/'+encodeURIComponent(id)+'/revoke',{method:'POST',body:JSON.stringify({reason:'revoked_from_product_workspace'})});toast('Installation revoked');loadView()}catch(e){toast(e.message)}
+}
+async function saveProductSettings(e,p){
+  e.preventDefault();const fd=new FormData(e.currentTarget);
+  try{
+    const updated=await api('/products/'+p.id,{method:'PUT',body:JSON.stringify({name:formVal(fd,'name'),description:formVal(fd,'description'),category:formVal(fd,'category'),price_cents:Number(formVal(fd,'price_cents')||0),currency:formVal(fd,'currency'),license_required:fd.get('license_required')==='on',protection_mode:formVal(fd,'protection_mode'),status:formVal(fd,'status')})});
+    toast('Product settings saved');setTitle(updated.name||p.name);loadView();
+  }catch(err){toast(err.message)}
+}
+function deleteCurrentProduct(p){
+  modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><div><div class="side-kicker">Danger zone</div><h2>Delete '+h(p.name)+'</h2></div><button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body"><div class="notice">This permanently deletes the product, releases, licenses and protection data.</div><div class="field"><label>Type <b>'+h(p.name)+'</b> to confirm</label><input id="delete-product-confirm" autocomplete="off"></div></div><div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="delete-product-confirm-btn" disabled><i class="fa-solid fa-trash"></i> Delete permanently</button></div></div></div>';
+  modalRoot.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>modalRoot.innerHTML='');
+  const input=document.querySelector('#delete-product-confirm'),btn=document.querySelector('#delete-product-confirm-btn');
+  input.oninput=()=>btn.disabled=input.value!==p.name;
+  btn.onclick=async()=>{try{btn.disabled=true;await api('/products/'+p.id,{method:'DELETE',body:'{}'});modalRoot.innerHTML='';state.productId=null;state.productTab='overview';toast('Product deleted');loadView()}catch(e){toast(e.message);btn.disabled=false}};
+}
 function createWorkspace(){
   const draft={step:1,name:'',slug:'',store_name:'',currency:'EUR',theme:state.theme==='light'?'light':'dark'};
   const draw=()=>{
