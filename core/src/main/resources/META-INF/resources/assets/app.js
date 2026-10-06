@@ -263,7 +263,18 @@ function empty(icon,title,text){return '<div class="empty"><i class="fa-solid '+
 function metrics(rows){return '<div class="metric-grid">'+rows.map(x=>'<div class="metric"><div class="label">'+h(x[0])+'</div><span class="value">'+h(x[1])+'</span><div class="hint">'+h(x[2]||'')+'</div></div>').join('')+'</div>'}
 function table(rows,cols){if(!rows||!rows.length)return empty('fa-inbox','Nothing here yet','The first items will appear here.');return '<div class="table-wrap"><table class="table"><thead><tr>'+cols.map(c=>'<th>'+h(c[1])+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+cell(r[c[0]],c[0])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
 function cell(v,k){if(k==='status'||k==='entitlement_status')return '<span class="pill '+(v==='active'||v==='published'||v==='granted'?'good':v==='open'?'warn':'')+'">'+h(v)+'</span>';if(k.includes('price_cents'))return h(money(v));return h(v)}
-async function loadView(){const c=document.querySelector('#content');if(c)c.innerHTML='<div class="empty">Loading…</div>';try{if(state.surface==='client')return loadClient();return loadDev()}catch(e){content('<div class="notice">'+h(e.message)+'</div>')}}
+async function loadView(){
+  const c=document.querySelector('#content');
+  if(c)c.innerHTML='<div class="page-loading"><div class="page-loading-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i></div><strong>Loading</strong><span>Preparing this view…</span></div>';
+  try{
+    if(state.surface==='client')await loadClient();
+    else await loadDev();
+  }catch(e){
+    setTitle('Unable to load');
+    content('<div class="page-error"><div class="page-error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div><div><h2>This page could not be loaded</h2><p>'+h(e.message||'Unexpected Forge error')+'</p><button class="btn" id="retry-view"><i class="fa-solid fa-rotate-right"></i> Retry</button></div></div>');
+    const retry=document.querySelector('#retry-view');if(retry)retry.onclick=loadView;
+  }
+}
 async function loadClient(){if(state.view==='home'){setTitle('Home');const [p,l,m]=await Promise.all([api('/client/products'),api('/client/licenses'),api('/marketplace')]);return content('<div class="hero"><div><h1>Welcome back, '+h(state.me.display_name)+'.</h1><p>Your purchases, licenses and Forge Key live here. Developer tooling stays in Developer Studio.</p></div></div>'+metrics([['Owned products',p.length,'Active entitlements'],['Licenses',l.length,'Runtime licenses'],['Marketplace',m.length,'Published products'],['Workspaces',state.workspaces.length,'Developer access']])+'<div class="panel"><div class="panel-head"><div><h2>Your Forge Key</h2><p>Used by compatible licensed resources.</p></div></div><div class="panel-body"><div class="key-box"><code>'+h(state.me.forge_key)+'</code><button class="btn" id="copy-key">Copy</button></div></div></div>');}
 if(state.view==='products'){setTitle('My Products');const rows=await api('/client/products');content('<div class="hero"><div><h1>My Products</h1><p>Products granted or purchased through Forge.</p></div></div><div class="cards">'+(rows.length?rows.map(productCard).join(''):empty('fa-box-open','No products yet','Browse the marketplace to add products.'))+'</div>');document.querySelectorAll('[data-download]').forEach(b=>b.onclick=()=>makeDownload(b.dataset.download));return}
 if(state.view==='licenses'){setTitle('Licenses');const rows=await api('/client/licenses');return content('<div class="hero"><div><h1>Licenses</h1><p>Runtime entitlement status and server limits.</p></div></div><div class="panel">'+table(rows,[['product_name','Product'],['license_key','License key'],['server_limit','Servers'],['status','Status'],['created_at','Created']])+'</div>')}
@@ -332,7 +343,20 @@ if(state.view==='overview'){
   return;
 }
 if(state.view==='products'){setTitle('Products');const rows=await api('/workspaces/'+wid+'/products');content('<div class="hero"><div><h1>Products</h1><p>Create drafts, configure licensing and publish only after a release exists.</p></div><button class="btn primary" id="product-new">New product</button></div><div class="cards">'+(rows.length?rows.map(devProductCard).join(''):empty('fa-cubes','No products','Create the first product in this workspace.'))+'</div>');document.querySelector('#product-new').onclick=createProduct;document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=()=>publishProduct(b.dataset.publish));return}
-if(state.view==='releases'){setTitle('Releases');const products=await api('/workspaces/'+wid+'/products');let all=[];for(const p of products){const rr=await api('/products/'+p.id+'/releases');rr.forEach(r=>all.push({...r,product_name:p.name,product_id:p.id}))}content('<div class="hero"><div><h1>Releases</h1><p>ZIP artifacts, changelogs and publication state.</p></div><button class="btn primary" id="release-new">Upload release</button></div><div class="panel">'+table(all,[['product_name','Product'],['version','Version'],['file_name','File'],['published','Published'],['created_at','Created']])+'</div>');document.querySelector('#release-new').onclick=()=>createRelease(products);return}
+if(state.view==='releases'){
+  setTitle('Releases');
+  const [products,all]=await Promise.all([
+    api('/workspaces/'+wid+'/products'),
+    api('/workspaces/'+wid+'/releases')
+  ]);
+  content('<div class="hero"><div><h1>Releases</h1><p>Versions, artifacts and publication state for this workspace.</p></div><button class="btn primary" id="release-new" '+(!products.length?'disabled':'')+'><i class="fa-solid fa-cloud-arrow-up"></i> Upload release</button></div>'+
+    '<div class="panel"><div class="panel-head"><div><h2>Workspace releases</h2><p>'+all.length+' release'+(all.length===1?'':'s')+' across '+products.length+' product'+(products.length===1?'':'s')+'.</p></div></div>'+
+    table(all,[['product_name','Product'],['version','Version'],['file_name','File'],['published','Published'],['created_at','Created']])+
+    '</div>'+
+    (!products.length?'<div class="notice"><i class="fa-solid fa-circle-info"></i> Create a product before uploading a release.</div>':''));
+  const btn=document.querySelector('#release-new');if(btn&&!btn.disabled)btn.onclick=()=>createRelease(products);
+  return;
+}
 if(state.view==='licenses'){setTitle('Workspace licenses');const rows=await api('/workspaces/'+wid+'/licenses');content('<div class="hero"><div><h1>Licenses</h1><p>Grant, revoke and limit runtime licenses.</p></div><button class="btn primary" id="license-new">Grant license</button></div><div class="panel">'+table(rows,[['product_name','Product'],['email','Customer'],['license_key','License key'],['server_limit','Servers'],['status','Status']])+'</div>');document.querySelector('#license-new').onclick=grantLicense;return}
 if(state.view==='protection'){setTitle('Runtime protection');const [products,installs]=await Promise.all([api('/workspaces/'+wid+'/products'),api('/workspaces/'+wid+'/protection/installations')]);content('<div class="hero"><div><h1>Runtime Protection</h1><p>Protection policies, signed build identities, fingerprints, heartbeat sessions and streamed modules.</p></div><button class="btn primary" id="protection-config">Configure product</button></div>'+metrics([['Products',products.length,'Workspace catalog'],['Installations',installs.length,'Known runtime installs'],['Active installs',installs.filter(x=>x.status==='active').length,'Not revoked']])+'<div class="panel"><div class="panel-head"><div><h2>Installations</h2><p>Latest protected runtime identities.</p></div></div>'+table(installs,[['product_name','Product'],['user_email','Customer'],['resource_id','Resource'],['version','Version'],['status','Status'],['last_seen_at','Last heartbeat']])+'</div>');document.querySelector('#protection-config').onclick=()=>configureProtection(products);return}
 if(state.view==='purchases'){setTitle('Purchase inbox');const rows=await api('/workspaces/'+wid+'/purchases');content('<div class="hero"><div><h1>Purchases</h1><p>Manual checkout requests and customer conversations.</p></div></div><div class="panel">'+table(rows,[['product_name','Product'],['buyer_email','Buyer'],['provider','Provider'],['status','Status'],['created_at','Created']])+'</div>');return}
