@@ -16,8 +16,6 @@ public class PublicAndAdminResource {
     @Inject SecurityService security;
     @Inject StorageService storage;
 
-    @ConfigProperty(name="NORD_ADMIN_URL",defaultValue="http://127.0.0.1:8089") String adminUrl;
-    @ConfigProperty(name="NORD_ADMIN_SSO_SECRET") String adminSsoSecret;
     @ConfigProperty(name="NORD_ADMIN_SERVICE_SECRET") String adminServiceSecret;
 
     @GET @Path("download/{token}")
@@ -46,18 +44,6 @@ public class PublicAndAdminResource {
         out.put("pages",db.query("SELECT title,slug,layout_json,theme FROM site_pages WHERE workspace_id=? AND published=TRUE ORDER BY updated_at DESC",wid));
         out.put("docs",db.query("SELECT title,slug,body FROM docs WHERE workspace_id=? AND published=TRUE ORDER BY updated_at DESC",wid));
         return Response.ok(out).build();
-    }
-
-    @GET @Path("api/v2/admin/launch")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response adminLaunch(@CookieParam("NF_SESSION") String session){
-        Map<String,Object> u=security.requireUser(session);
-        if(!Boolean.TRUE.equals(u.get("platform_owner"))) throw new ForbiddenException("platform_owner_required");
-        long exp=Instant.now().plusSeconds(90).getEpochSecond();
-        String payload=u.get("id")+":"+Base64.getUrlEncoder().withoutPadding().encodeToString(String.valueOf(u.get("email")).getBytes(StandardCharsets.UTF_8))+":"+exp;
-        String enc=Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
-        String sig=security.hmac(adminSsoSecret,enc);
-        return Response.ok(Map.of("ok",true,"url",adminUrl+"/?token="+enc+"."+sig)).build();
     }
 
     private void internal(String secret){ if(secret==null||!secret.equals(adminServiceSecret)) throw new NotAuthorizedException("admin_service"); }
