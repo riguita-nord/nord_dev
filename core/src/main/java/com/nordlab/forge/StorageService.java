@@ -1,7 +1,9 @@
 package com.nordlab.forge;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.*;
@@ -14,14 +16,14 @@ public class StorageService {
     @ConfigProperty(name="NORD_FORGE_DATA_DIR",defaultValue="/tmp/nord-forge") String root;
 
     public String saveRelease(long workspaceId,long productId,String version,String fileName,String fileBase64){
-        if(fileBase64==null||fileBase64.isBlank()) throw new BadRequestException("release_file_required");
+        if(fileBase64==null||fileBase64.isBlank()) throw validation("release_file_required");
         byte[] data;
-        try{ data=Base64.getDecoder().decode(fileBase64); }catch(Exception e){ throw new BadRequestException("invalid_base64"); }
-        if(data.length>512L*1024L*1024L) throw new BadRequestException("release_too_large_512mb");
-        if(fileName==null||!fileName.toLowerCase().endsWith(".zip")) throw new BadRequestException("zip_required");
+        try{ data=Base64.getDecoder().decode(fileBase64); }catch(Exception e){ throw validation("invalid_base64"); }
+        if(data.length>512L*1024L*1024L) throw validation("release_too_large_512mb");
+        if(fileName==null||!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) throw validation("zip_required");
         try(ZipInputStream zin=new ZipInputStream(new ByteArrayInputStream(data))){
-            if(zin.getNextEntry()==null) throw new BadRequestException("invalid_zip");
-        }catch(IOException e){throw new BadRequestException("invalid_zip");}
+            if(zin.getNextEntry()==null) throw validation("invalid_zip");
+        }catch(IOException e){throw validation("invalid_zip");}
         try{
             Path dir=Path.of(root,"storage","releases",String.valueOf(workspaceId),String.valueOf(productId),safe(version));
             Files.createDirectories(dir);
@@ -29,6 +31,15 @@ public class StorageService {
             Files.write(out,data,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING);
             return out.toAbsolutePath().toString();
         }catch(IOException e){throw new IllegalStateException("release_storage_failed",e);}
+    }
+
+    private WebApplicationException validation(String code){
+        return new WebApplicationException(
+            Response.status(Response.Status.BAD_REQUEST)
+                .type(MediaType.APPLICATION_JSON_TYPE)
+                .entity(Map.of("ok",false,"error",code,"message",code))
+                .build()
+        );
     }
 
     public byte[] read(String path){
