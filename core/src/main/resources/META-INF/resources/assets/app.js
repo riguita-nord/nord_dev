@@ -207,6 +207,19 @@ function workspaceRail(){
     return '<button class="rail-workspace '+(selected?'active':'')+'" data-workspace-rail="'+w.id+'" title="'+h(w.name)+'"><span>'+h(initials||'W')+'</span></button>';
   }).join('');
 }
+function sideNavMarkup(){
+  if(state.surface!=='dev'){
+    return I.client.map(x=>'<button class="nav-btn '+(state.view===x[0]?'active':'')+'" data-view="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i>'+h(x[2])+'</button>').join('');
+  }
+  const groups=[
+    ['',I.dev.filter(x=>x[0]==='overview')],
+    ['Products',I.dev.filter(x=>x[0]==='products')],
+    ['Commerce',I.dev.filter(x=>['purchases','store'].includes(x[0]))],
+    ['Content',I.dev.filter(x=>['docs','integrations'].includes(x[0]))],
+    ['Workspace',I.dev.filter(x=>['team','infra','audit','settings'].includes(x[0]))]
+  ];
+  return groups.map(g=>(g[0]?'<div class="nav-group-label">'+h(g[0])+'</div>':'')+g[1].map(x=>'<button class="nav-btn '+(state.view===x[0]?'active':'')+'" data-view="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i>'+h(x[2])+'</button>').join('')).join('');
+}
 function renderShell(){
   localStorage.setItem('nf_surface',state.surface);
   const validViews=(I[state.surface]||[]).map(x=>x[0]);
@@ -235,7 +248,7 @@ function renderShell(){
     '</aside>'+
     '<aside class="side">'+
       '<div class="side-head"><div class="side-kicker">'+h(title)+'</div><div class="side-title">'+(state.surface==='client'?'Nord Forge':h(state.workspace.name))+'</div><div class="side-sub">'+(state.surface==='client'?h(state.me.email):'Role · '+h(state.workspace.my_role))+'</div></div>'+
-      '<nav class="side-nav">'+items.map(x=>'<button class="nav-btn '+(state.view===x[0]?'active':'')+'" data-view="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i>'+h(x[2])+'</button>').join('')+'</nav>'+
+      '<nav class="side-nav">'+sideNavMarkup()+'</nav>'+
       '<div class="side-foot">Nord Forge V2 · Java Runtime</div>'+
     '</aside>'+
     '<section class="main"><header class="topbar"><div><div class="crumb">'+h(title)+(state.surface==='dev'?' / '+h(state.workspace.name):'')+'</div><div class="page-name" id="page-name">Loading</div></div><div class="top-actions"></div></header><main class="content" id="content"></main></section>'+
