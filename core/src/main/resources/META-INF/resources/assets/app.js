@@ -510,6 +510,11 @@ function renderProductWorkspace(d){
         '<header class="nui-builder-toolbar">'+
           '<div class="nui-builder-title"><div class="nui-builder-mark"><i class="fa-solid fa-pen-ruler"></i></div><div><strong>NUI Builder</strong><span id="nui-builder-source">Visual workspace for '+h(p.name)+'</span></div></div>'+
           '<div class="nui-builder-toolbar-center">'+
+            '<div class="nui-interface-control" title="Preview interface">'+
+              '<i class="fa-solid fa-layer-group"></i>'+
+              '<select id="nui-interface-select"><option value="all">All interfaces</option></select>'+
+            '</div>'+
+            '<span class="nui-toolbar-separator"></span>'+
             '<button class="nui-view-btn active" data-nui-view="desktop" title="Desktop"><i class="fa-solid fa-desktop"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="tablet" title="Tablet"><i class="fa-solid fa-tablet-screen-button"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="mobile" title="Mobile"><i class="fa-solid fa-mobile-screen-button"></i></button>'+
@@ -633,8 +638,122 @@ async function initNuiBuilder(p){
   let settings={viewport:'desktop',background:'transparent'};
   try{settings={...settings,...JSON.parse(project.settings_json||'{}')}}catch(e){}
 
+  let selectedInterface='all';
+
+  const interfaceName=(el,index)=>{
+    const id=(el.id||'').trim();
+    if(id)return id.replace(/[-_]+/g,' ');
+    const classes=[...el.classList].filter(x=>!['container','wrapper','root','app','main','content'].includes(x.toLowerCase()));
+    if(classes.length)return classes[0].replace(/[-_]+/g,' ');
+    return 'Interface '+(index+1);
+  };
+
+  const hiddenSelectorsFromCss=source=>{
+    const selectors=[];
+    const rule=/([^{}]+)\{([^{}]+)\}/g;
+    let m;
+    while((m=rule.exec(source))){
+      const body=m[2];
+      if(/display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\D|$)/i.test(body)){
+        m[1].split(',').map(x=>x.trim()).filter(Boolean).forEach(x=>{
+          if(!x.startsWith('@')&&!x.includes(':hover')&&!x.includes(':focus')&&!x.includes(':active'))selectors.push(x);
+        });
+      }
+    }
+    return selectors;
+  };
+
+  const detectInterfaces=source=>{
+    const doc=new DOMParser().parseFromString(source||'','text/html');
+    const valid=el=>el&&['SCRIPT','STYLE','LINK','META','TITLE','TEMPLATE','NOSCRIPT'].indexOf(el.tagName)===-1;
+    let candidates=[...doc.body.children].filter(valid);
+
+    // A lot of FiveM NUIs use one generic #app/root with several independent children.
+    if(candidates.length===1){
+      const root=candidates[0];
+      const children=[...root.children].filter(valid);
+      if(children.length>1)candidates=children;
+    }
+
+    // Hidden roots are especially important because FiveM normally reveals them via SendNUIMessage.
+    hiddenSelectorsFromCss(css.value).forEach(selector=>{
+      try{
+        doc.querySelectorAll(selector).forEach(el=>{
+          if(valid(el)&&el!==doc.body&&el!==doc.documentElement)candidates.push(el);
+        });
+      }catch(e){}
+    });
+
+    // Explicit hide/hidden classes should also be considered independent preview surfaces.
+    doc.querySelectorAll('.hide,.hidden,.d-none,[hidden]').forEach(el=>{
+      if(valid(el))candidates.push(el);
+    });
+
+    candidates=[...new Set(candidates)];
+    // If a generic wrapper contains several more specific candidates, do not expose the wrapper as another UI.
+    candidates=candidates.filter(el=>{
+      const nested=candidates.filter(other=>other!==el&&el.contains(other));
+      if(nested.length<2)return true;
+      const key=((el.id||'')+' '+(el.className||'')).toLowerCase();
+      return !/(^|\s)(app|root|wrapper|container|main)(\s|$)/.test(key);
+    });
+
+    // Keep only meaningful roots; nested duplicates are collapsed to the highest useful root.
+    candidates=candidates.filter((el,i,arr)=>!arr.some((other,j)=>j!==i&&other.contains(el)&&!/(app|root|wrapper|container)/i.test((other.id||'')+' '+(other.className||''))));
+    if(!candidates.length)candidates=[...doc.body.children].filter(valid).slice(0,1);
+
+    candidates.slice(0,12).forEach((el,index)=>el.setAttribute('data-nord-interface',String(index)));
+    return {
+      html:doc.body.innerHTML,
+      items:candidates.slice(0,12).map((el,index)=>({id:String(index),name:interfaceName(el,index)}))
+    };
+  };
+
+  const refreshInterfacePicker=items=>{
+    const picker=document.querySelector('#nui-interface-select');
+    if(!picker)return;
+    const wanted=selectedInterface;
+    picker.innerHTML='<option value="all">All interfaces</option>'+items.map(x=>'<option value="'+h(x.id)+'">'+h(x.name)+'</option>').join('');
+    if(wanted!=='all'&&items.some(x=>x.id===wanted))picker.value=wanted;
+    else{selectedInterface='all';picker.value='all'}
+    picker.parentElement.classList.toggle('multiple',items.length>1);
+  };
+
+  const previewCss=source=>String(source||'')
+    // Builder preview must not inherit FiveM's "closed by default" state.
+    .replace(/display\s*:\s*none\s*;?/gi,'')
+    .replace(/visibility\s*:\s*hidden\s*;?/gi,'')
+    .replace(/opacity\s*:\s*0(?:\.0+)?\s*;?/gi,'');
+
   const renderPreview=()=>{
-    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;}'+css.value+'</style></head><body>'+html.value+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    const detected=detectInterfaces(html.value);
+    refreshInterfacePicker(detected.items);
+    const selected=selectedInterface;
+    const isolation=selected==='all'?'':[
+      '[data-nord-interface]{display:none!important;visibility:hidden!important;opacity:0!important;}',
+      '[data-nord-interface="'+selected+'"]{display:block!important;visibility:visible!important;opacity:1!important;}'
+    ].join('');
+    const guardScript=selected==='all'?'':`
+      (()=>{
+        const id=${JSON.stringify(selected)};
+        const keep=()=>{
+          document.querySelectorAll('[data-nord-interface]').forEach(el=>{
+            if(el.getAttribute('data-nord-interface')===id){
+              el.style.setProperty('display','block','important');
+              el.style.setProperty('visibility','visible','important');
+              el.style.setProperty('opacity','1','important');
+              el.hidden=false;
+              el.classList.remove('hide','hidden','d-none');
+            }else{
+              el.style.setProperty('display','none','important');
+            }
+          });
+        };
+        keep();
+        new MutationObserver(keep).observe(document.body,{subtree:true,attributes:true,attributeFilter:['style','class','hidden']});
+      })();
+    `;
+    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;}'+previewCss(css.value)+isolation+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+guardScript.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
     frame.srcdoc=documentHtml;
   };
 
@@ -657,6 +776,13 @@ async function initNuiBuilder(p){
   };
   document.querySelectorAll('[data-nui-view]').forEach(btn=>btn.onclick=()=>setViewport(btn.dataset.nuiView));
   setViewport(settings.viewport||'desktop');
+  const interfaceSelect=document.querySelector('#nui-interface-select');
+  if(interfaceSelect)interfaceSelect.onchange=()=>{
+    selectedInterface=interfaceSelect.value||'all';
+    settings.interface=selectedInterface;
+    renderPreview();
+  };
+  selectedInterface=settings.interface||'all';
 
   const snippets={
     container:'\n<div class="container">\n  <!-- content -->\n</div>\n',
