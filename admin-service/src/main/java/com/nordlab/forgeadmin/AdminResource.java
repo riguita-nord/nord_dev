@@ -23,6 +23,11 @@ public class AdminResource {
 
     private final HttpClient http=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(4)).build();
 
+    @GET @Path("/health")
+    public Response health(){
+        return Response.ok(Map.of("ok",true,"service","nord-forge-admin")).build();
+    }
+
     @POST @Path("/session")
     public Response session(Map<String,Object> b){
         var s=sessions.accept(String.valueOf(b.get("token")));
