@@ -58,11 +58,16 @@ case "$MODE" in
     exec 9>"$LOCK"; flock -n 9 || die "Another update is running."
     bootstrap update
     ;;
+  replace)
+    require_root
+    exec 9>"$LOCK"; flock -n 9 || die "Another update is running."
+    bootstrap replace
+    ;;
   uninstall)
     require_root
     if [[ -f "$SELF_DIR/install.sh" ]]; then exec bash "$SELF_DIR/install.sh" uninstall; fi
     bootstrap uninstall
     ;;
   version|--version|-V) cat "$SELF_DIR/VERSION" 2>/dev/null || echo "Nord Forge V2";;
-  *) die "Usage: $0 [install|update|uninstall|version]";;
+  *) die "Usage: $0 [install|update|replace|uninstall|version]";;
 esac
