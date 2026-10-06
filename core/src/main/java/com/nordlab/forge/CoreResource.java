@@ -371,6 +371,51 @@ public class CoreResource {
         return ok(fallback);
     }
 
+    @GET
+    @Path("/products/{pid}/nui/live/{entry: .+}")
+    @Produces("*/*")
+    public Response liveNuiAsset(@PathParam("pid") long pid,@PathParam("entry") String entry,@CookieParam("NF_SESSION") String session,@Context UriInfo uriInfo){
+        Map<String,Object> p=db.one("SELECT id,workspace_id FROM products WHERE id=?",pid);
+        if(p==null) throw new NotFoundException("product_not_found");
+        forge.requireWorkspace(uid(session),((Number)p.get("workspace_id")).longValue());
+
+        Map<String,Object> latest=db.one("""
+          SELECT id,storage_path
+          FROM releases
+          WHERE product_id=?
+          ORDER BY published DESC, created_at DESC
+          LIMIT 1
+          """,pid);
+        if(latest==null) throw new NotFoundException("release_not_found");
+
+        StorageService.NuiAsset asset=storage.readNuiAsset(String.valueOf(latest.get("storage_path")),entry);
+        if(asset==null) throw new NotFoundException("nui_asset_not_found");
+
+        byte[] data=asset.data();
+        String mediaType=asset.mediaType();
+        if("text/html".equals(mediaType)){
+            String html=new String(data,StandardCharsets.UTF_8);
+            String normalized=asset.entryPath().replace('\\','/');
+            int slash=normalized.lastIndexOf('/');
+            String parent=slash<0?"":normalized.substring(0,slash+1);
+            String base=uriInfo.getBaseUri().resolve("api/v2/products/"+pid+"/nui/live/"+parent).toString();
+
+            // Absolute asset paths are common in Vite/Webpack builds. Inside a FiveM resource
+            // they still belong to the NUI web root, so remap them to this release preview root.
+            html=html
+                .replaceAll("(?i)(src|href)=([\\\"'])/(?!/)", "$1=$2"+java.util.regex.Matcher.quoteReplacement(base))
+                .replaceAll("(?i)(srcset)=([\\\"'])/(?!/)", "$1=$2"+java.util.regex.Matcher.quoteReplacement(base));
+            html=storage.injectNuiPreviewBridge(html,base);
+            data=html.getBytes(StandardCharsets.UTF_8);
+        }
+
+        return Response.ok(data)
+            .type(mediaType)
+            .header("Cache-Control","no-store, no-cache, must-revalidate")
+            .header("Pragma","no-cache")
+            .build();
+    }
+
     @PUT @Path("/products/{pid}/nui")
     public Response saveNuiProject(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf);
