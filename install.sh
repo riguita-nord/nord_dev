@@ -268,6 +268,20 @@ start_services(){
   systemctl restart nord-forge.service nord-forge-admin.service
 }
 
+reconcile_storage(){
+  local secret response
+  secret="$(grep '^NORD_ADMIN_SERVICE_SECRET=' "$ENV_FILE" | head -n1 | cut -d= -f2-)"
+  [[ -n "$secret" ]] || die "NORD_ADMIN_SERVICE_SECRET is missing; storage reconciliation cannot run."
+
+  log "Reconciling Forge database and storage; removing ghost releases and orphan files..."
+  response="$(curl -fsS --max-time 120     -X POST     -H "X-Nord-Admin-Service: $secret"     "http://127.0.0.1:8088/api/v2/internal/maintenance/reconcile-storage")" || {
+      warn "Storage reconciliation failed."
+      return 1
+    }
+
+  log "Storage reconciliation completed: $response"
+}
+
 show_failure_logs(){
   journalctl -u nord-forge -n 100 --no-pager || true
   journalctl -u nord-forge-admin -n 100 --no-pager || true
@@ -312,6 +326,7 @@ case "$ACTION" in
       fi
       die "Initial installation failed health verification."
     fi
+    reconcile_storage || die "Initial storage reconciliation failed."
     commit_database_generation
     log "Nord Forge V$VERSION installed and healthy. Open the web UI to create the first Platform Owner."
     ;;
@@ -325,9 +340,9 @@ case "$ACTION" in
     reset_legacy_database_once
     ensure_env
 
-    if install_files && start_services && health_check; then
+    if install_files && start_services && health_check && reconcile_storage; then
       commit_database_generation
-      log "Nord Forge V$VERSION update committed successfully. If this was the legacy migration, open the web UI to create the first Platform Owner."
+      log "Nord Forge V$VERSION update committed successfully. Storage reconciliation completed and ghost data was purged."
     else
       show_failure_logs
       if rollback; then
