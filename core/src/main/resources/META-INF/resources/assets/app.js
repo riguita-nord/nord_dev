@@ -11,7 +11,111 @@ function formVal(fd,k){return String(fd.get(k)||'').trim()}
 async function boot(){document.documentElement.dataset.theme=state.theme;try{const setup=await api('/setup/status');if(setup.needs_setup){renderSetup();return}const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();renderShell();loadView()}catch(e){if(!state.me)renderAuth()}}
 function renderAuth(){app.innerHTML='<div class="auth-page"><section class="auth-pane"><div class="auth-card"><div class="auth-brand"><div class="rail-mark"><i class="fa-solid fa-code"></i></div><div><b>Nord Forge</b><div class="side-kicker">Developer Platform V2</div></div></div><h1>Welcome back.</h1><p>Sign in to your Client Area or Developer Studio.</p><div class="auth-tabs"><button class="active" data-auth="login"><i class="fa-solid fa-right-to-bracket"></i> Sign in</button><button data-auth="register"><i class="fa-solid fa-user-plus"></i> Register</button></div><div id="auth-form"></div></div></section><section class="auth-art"><div class="auth-art-icon"><i class="fa-solid fa-cubes"></i></div><div class="side-kicker">Nord Forge V2</div><h2>Build, ship and manage your ecosystem.</h2><p>Client Area, Developer Studio and isolated Administration stay separated while products, licensing, releases and support remain connected.</p></section></div>';document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x===b));authForm(b.dataset.auth)});authForm('login')}
 function authForm(mode){const host=document.querySelector('#auth-form');host.innerHTML='<form class="form">'+(mode==='register'?'<div class="field"><label><i class="fa-solid fa-user"></i> Display name</label><div class="input-icon"><i class="fa-solid fa-user"></i><input name="display_name" autocomplete="name" required></div></div>':'')+'<div class="field"><label><i class="fa-solid fa-envelope"></i> Email</label><div class="input-icon"><i class="fa-solid fa-envelope"></i><input name="email" type="email" autocomplete="email" required></div></div><div class="field"><label><i class="fa-solid fa-lock"></i> Password</label><div class="input-icon"><i class="fa-solid fa-lock"></i><input name="password" type="password" minlength="10" autocomplete="'+(mode==='login'?'current-password':'new-password')+'" required></div></div><button class="btn primary auth-submit" type="submit"><i class="fa-solid '+(mode==='login'?'fa-right-to-bracket':'fa-user-plus')+'"></i> '+(mode==='login'?'Sign in':'Create account')+'</button></form>';host.querySelector('form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{const d=await api('/auth/'+mode,{method:'POST',body:JSON.stringify({email:formVal(fd,'email'),password:formVal(fd,'password'),display_name:formVal(fd,'display_name')})});state.me=d.user;state.csrf=d.csrf;await loadWorkspaces();renderShell();loadView()}catch(err){toast(err.message)}}}
-function renderSetup(){app.innerHTML='<div class="auth-page setup-page"><section class="auth-pane"><div class="auth-card setup-card"><div class="auth-brand"><div class="rail-mark"><i class="fa-solid fa-wand-magic-sparkles"></i></div><div><b>Nord Forge</b><div class="side-kicker">Initial setup</div></div></div><div class="setup-badge"><i class="fa-solid fa-shield-halved"></i> First boot</div><h1>Create the Platform Owner.</h1><p>This is a clean Forge V2 database. Create the first account to unlock Client Area, Developer Studio and Administration.</p><div id="setup-form"></div><div class="setup-note"><i class="fa-solid fa-circle-info"></i><span>The first account is protected as the Platform Owner. Use a strong password with at least 10 characters.</span></div></div></section><section class="auth-art"><div class="auth-art-icon"><i class="fa-solid fa-layer-group"></i></div><div class="side-kicker">Nord Forge V2</div><h2>Fresh platform. Clean ownership.</h2><p>The previous database is not reused. Forge creates the new schema automatically and this account becomes the root owner of the platform.</p></section></div>';const host=document.querySelector('#setup-form');host.innerHTML='<form class="form"><div class="field"><label><i class="fa-solid fa-user"></i> Display name</label><div class="input-icon"><i class="fa-solid fa-user"></i><input name="display_name" autocomplete="name" required></div></div><div class="field"><label><i class="fa-solid fa-envelope"></i> Email</label><div class="input-icon"><i class="fa-solid fa-envelope"></i><input name="email" type="email" autocomplete="email" required></div></div><div class="field"><label><i class="fa-solid fa-lock"></i> Password</label><div class="input-icon"><i class="fa-solid fa-lock"></i><input name="password" type="password" minlength="10" autocomplete="new-password" required></div></div><button class="btn primary auth-submit" type="submit"><i class="fa-solid fa-rocket"></i> Create Platform Owner</button></form>';host.querySelector('form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{const d=await api('/auth/register',{method:'POST',body:JSON.stringify({email:formVal(fd,'email'),password:formVal(fd,'password'),display_name:formVal(fd,'display_name')})});state.me=d.user;state.csrf=d.csrf;state.surface='client';state.view='home';await loadWorkspaces();renderShell();loadView()}catch(err){toast(err.message)}}}
+function renderSetup(){
+  const setup={step:1,name:'',email:'',password:''};
+  const render=()=>{
+    const strength=passwordStrength(setup.password);
+    app.innerHTML='<div class="setup-shell">'+
+      '<aside class="setup-sidebar">'+
+        '<div class="setup-brand"><div class="setup-logo"><i class="fa-solid fa-cube"></i></div><div><strong>Nord Forge</strong><span>Developer Platform V2</span></div></div>'+
+        '<div class="setup-side-copy"><div class="setup-eyebrow"><i class="fa-solid fa-sparkles"></i> First launch</div><h1>Configure your Forge.</h1><p>A clean workspace for products, releases, licensing and administration starts here.</p></div>'+
+        '<div class="setup-visual">'+
+          '<div class="setup-orbit orbit-a"></div><div class="setup-orbit orbit-b"></div>'+
+          '<div class="setup-core"><i class="fa-solid fa-code-branch"></i></div>'+
+          '<div class="setup-node node-a"><i class="fa-solid fa-user-shield"></i><span>Owner</span></div>'+
+          '<div class="setup-node node-b"><i class="fa-solid fa-cubes"></i><span>Workspaces</span></div>'+
+          '<div class="setup-node node-c"><i class="fa-solid fa-key"></i><span>Licensing</span></div>'+
+        '</div>'+
+        '<div class="setup-side-foot"><span><i class="fa-solid fa-circle-check"></i> Java runtime ready</span><span><i class="fa-solid fa-shield-halved"></i> Clean V2 database</span></div>'+
+      '</aside>'+
+      '<main class="setup-main">'+
+        '<header class="setup-topbar"><div class="setup-progress-copy"><span>Initial setup</span><strong>Step '+setup.step+' of 3</strong></div><div class="setup-progress">'+[1,2,3].map(i=>'<span class="'+(i<=setup.step?'active':'')+'"></span>').join('')+'</div></header>'+
+        '<section class="setup-stage">'+
+          '<div class="setup-step '+(setup.step===1?'active':'')+'" data-step="1">'+
+            '<div class="setup-step-icon"><i class="fa-solid fa-user-astronaut"></i></div>'+
+            '<div class="setup-kicker">Platform identity</div><h2>Create the Platform Owner</h2><p>This account controls Administration and owns the first Forge environment.</p>'+
+            '<div class="setup-form-grid">'+
+              '<div class="setup-field full"><label><i class="fa-solid fa-user"></i> Display name</label><div class="setup-input"><i class="fa-solid fa-user"></i><input id="setup-name" value="'+h(setup.name)+'" placeholder="Ricardo" autocomplete="name"></div><small>Shown across Forge and Administration.</small></div>'+
+              '<div class="setup-field full"><label><i class="fa-solid fa-envelope"></i> Email address</label><div class="setup-input"><i class="fa-solid fa-envelope"></i><input id="setup-email" value="'+h(setup.email)+'" type="email" placeholder="you@nord-lab.io" autocomplete="email"></div><small>Used to sign in to the platform.</small></div>'+
+            '</div>'+
+          '</div>'+
+          '<div class="setup-step '+(setup.step===2?'active':'')+'" data-step="2">'+
+            '<div class="setup-step-icon"><i class="fa-solid fa-shield-halved"></i></div>'+
+            '<div class="setup-kicker">Account security</div><h2>Secure the owner account</h2><p>Use a strong password. This account has access to the global Administration service.</p>'+
+            '<div class="setup-form-grid">'+
+              '<div class="setup-field full"><label><i class="fa-solid fa-lock"></i> Password</label><div class="setup-input"><i class="fa-solid fa-lock"></i><input id="setup-password" value="'+h(setup.password)+'" type="password" minlength="10" placeholder="At least 10 characters" autocomplete="new-password"><button type="button" class="setup-eye" id="setup-eye"><i class="fa-solid fa-eye"></i></button></div></div>'+
+              '<div class="password-meter"><div class="password-meter-bar"><span style="width:'+strength.percent+'%"></span></div><div><strong>'+strength.label+'</strong><span>'+strength.help+'</span></div></div>'+
+              '<div class="security-grid">'+
+                '<div class="'+(setup.password.length>=10?'ok':'')+'"><i class="fa-solid '+(setup.password.length>=10?'fa-check':'fa-minus')+'"></i><span>10+ characters</span></div>'+
+                '<div class="'+(/[A-Z]/.test(setup.password)?'ok':'')+'"><i class="fa-solid '+(/[A-Z]/.test(setup.password)?'fa-check':'fa-minus')+'"></i><span>Uppercase</span></div>'+
+                '<div class="'+(/[0-9]/.test(setup.password)?'ok':'')+'"><i class="fa-solid '+(/[0-9]/.test(setup.password)?'fa-check':'fa-minus')+'"></i><span>Number</span></div>'+
+                '<div class="'+(/[^A-Za-z0-9]/.test(setup.password)?'ok':'')+'"><i class="fa-solid '+(/[^A-Za-z0-9]/.test(setup.password)?'fa-check':'fa-minus')+'"></i><span>Symbol</span></div>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+          '<div class="setup-step '+(setup.step===3?'active':'')+'" data-step="3">'+
+            '<div class="setup-step-icon success"><i class="fa-solid fa-rocket"></i></div>'+
+            '<div class="setup-kicker">Ready to launch</div><h2>Review your Forge</h2><p>Once created, this account becomes the protected Platform Owner.</p>'+
+            '<div class="setup-review">'+
+              '<div><span>Owner</span><strong>'+h(setup.name||'Not set')+'</strong></div>'+
+              '<div><span>Email</span><strong>'+h(setup.email||'Not set')+'</strong></div>'+
+              '<div><span>Role</span><strong>Platform Owner</strong></div>'+
+              '<div><span>Database</span><strong>Forge V2 · Clean</strong></div>'+
+            '</div>'+
+            '<div class="setup-ready"><i class="fa-solid fa-circle-check"></i><div><strong>Everything is ready.</strong><span>Forge will create your account and open the Client Area.</span></div></div>'+
+          '</div>'+
+        '</section>'+
+        '<footer class="setup-actions">'+
+          '<button class="setup-btn secondary" id="setup-back" '+(setup.step===1?'disabled':'')+'><i class="fa-solid fa-arrow-left"></i> Back</button>'+
+          '<div class="setup-action-right">'+(setup.step<3?
+            '<button class="setup-btn primary" id="setup-next">Continue <i class="fa-solid fa-arrow-right"></i></button>':
+            '<button class="setup-btn primary launch" id="setup-create"><i class="fa-solid fa-wand-magic-sparkles"></i> Create Forge</button>')+'</div>'+
+        '</footer>'+
+      '</main>'+
+    '</div>';
+
+    const name=document.querySelector('#setup-name'),email=document.querySelector('#setup-email'),password=document.querySelector('#setup-password');
+    if(name)name.oninput=e=>setup.name=e.target.value;
+    if(email)email.oninput=e=>setup.email=e.target.value;
+    if(password)password.oninput=e=>{setup.password=e.target.value;render()};
+    const eye=document.querySelector('#setup-eye');
+    if(eye)eye.onclick=()=>{const p=document.querySelector('#setup-password');const show=p.type==='password';p.type=show?'text':'password';eye.innerHTML='<i class="fa-solid '+(show?'fa-eye-slash':'fa-eye')+'"></i>'};
+    const back=document.querySelector('#setup-back');
+    if(back)back.onclick=()=>{if(setup.step>1){setup.step--;render()}};
+    const next=document.querySelector('#setup-next');
+    if(next)next.onclick=()=>{
+      if(setup.step===1){
+        if(setup.name.trim().length<2)return toast('Enter a display name.');
+        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(setup.email.trim()))return toast('Enter a valid email address.');
+      }
+      if(setup.step===2&&setup.password.length<10)return toast('Password must have at least 10 characters.');
+      setup.step++;render();
+    };
+    const create=document.querySelector('#setup-create');
+    if(create)create.onclick=async()=>{
+      create.disabled=true;create.classList.add('loading');create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating Forge...';
+      try{
+        const d=await api('/auth/register',{method:'POST',body:JSON.stringify({email:setup.email.trim(),password:setup.password,display_name:setup.name.trim()})});
+        state.me=d.user;state.csrf=d.csrf;state.surface='client';state.view='home';await loadWorkspaces();renderShell();loadView();
+      }catch(err){toast(err.message);create.disabled=false;create.classList.remove('loading');create.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Create Forge'}
+    };
+  };
+  render();
+}
+function passwordStrength(password){
+  let score=0;
+  if(password.length>=10)score++;
+  if(password.length>=14)score++;
+  if(/[A-Z]/.test(password)&&/[a-z]/.test(password))score++;
+  if(/[0-9]/.test(password))score++;
+  if(/[^A-Za-z0-9]/.test(password))score++;
+  if(!password)return {percent:0,label:'No password yet',help:'Add a strong password to continue.'};
+  if(score<=1)return {percent:24,label:'Weak',help:'Add length, numbers and symbols.'};
+  if(score===2)return {percent:48,label:'Fair',help:'A little more complexity will help.'};
+  if(score===3)return {percent:68,label:'Good',help:'Good start. You can make it stronger.'};
+  if(score===4)return {percent:84,label:'Strong',help:'Strong enough for an owner account.'};
+  return {percent:100,label:'Excellent',help:'Excellent password strength.'};
+}
 async function loadWorkspaces(){try{state.workspaces=await api('/workspaces');if(state.workspace){state.workspace=state.workspaces.find(w=>String(w.id)===String(state.workspace.id))||null}if(!state.workspace&&state.workspaces.length)state.workspace=state.workspaces.find(w=>w.status==='active')||state.workspaces[0]}catch(e){state.workspaces=[];state.workspace=null}}
 function renderShell(){localStorage.setItem('nf_surface',state.surface);const items=I[state.surface];const title=state.surface==='client'?'Client Area':'Developer Studio';app.innerHTML='<div class="app-shell"><aside class="app-rail"><button class="rail-mark" title="Nord Forge">N</button><button class="rail-btn '+(state.surface==='client'?'active':'')+'" data-surface="client" title="Client Area"><i class="fa-solid fa-house"></i></button><button class="rail-btn '+(state.surface==='dev'?'active':'')+'" data-surface="dev" title="Developer Studio"><i class="fa-solid fa-code"></i></button><div class="rail-sep"></div><div class="rail-spacer"></div>'+(state.me.platform_owner?'<button class="rail-btn" id="admin-launch" title="Administration"><i class="fa-solid fa-shield-halved"></i></button>':'')+'<button class="rail-btn" id="theme" title="Theme"><i class="fa-solid fa-circle-half-stroke"></i></button><button class="rail-btn" id="logout" title="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button><div class="rail-avatar">'+h((state.me.display_name||state.me.email).slice(0,2).toUpperCase())+'</div></aside><aside class="side"><div class="side-head"><div class="side-kicker">'+h(title)+'</div><div class="side-title">'+(state.surface==='client'?'Nord Forge':h(state.workspace?state.workspace.name:'Workspaces'))+'</div><div class="side-sub">'+(state.surface==='client'?h(state.me.email):(state.workspace?'Role · '+h(state.workspace.my_role):'Create your first workspace'))+'</div></div>'+(state.surface==='dev'?workspacePicker():'')+'<nav class="side-nav">'+items.map(x=>'<button class="nav-btn '+(state.view===x[0]?'active':'')+'" data-view="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i>'+h(x[2])+'</button>').join('')+'</nav><div class="side-foot">Nord Forge V2 · Java Runtime</div></aside><section class="main"><header class="topbar"><div><div class="crumb">'+h(title)+(state.surface==='dev'&&state.workspace?' / '+h(state.workspace.name):'')+'</div><div class="page-name" id="page-name">Loading</div></div><div class="top-actions">'+(state.surface==='dev'?'<button class="btn" id="new-workspace"><i class="fa-solid fa-plus"></i> <span>Workspace</span></button>':'')+'</div></header><main class="content" id="content"></main></section></div>';
 document.querySelectorAll('[data-surface]').forEach(b=>b.onclick=()=>switchSurface(b.dataset.surface));document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;renderShell();loadView()});if(document.querySelector('#workspace-picker'))document.querySelector('#workspace-picker').onchange=e=>{state.workspace=state.workspaces.find(w=>String(w.id)===e.target.value)||null;state.view='overview';renderShell();loadView()};if(document.querySelector('#new-workspace'))document.querySelector('#new-workspace').onclick=createWorkspace;if(document.querySelector('#admin-launch'))document.querySelector('#admin-launch').onclick=launchAdmin;document.querySelector('#theme').onclick=toggleTheme;document.querySelector('#logout').onclick=logout}
