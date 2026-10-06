@@ -440,11 +440,30 @@ renderShell();
 return loadView();
 }
 function devProductCard(p){
-  return '<article class="product-catalog-card" data-manage-product="'+p.id+'">'+
-    '<div class="product-card-top"><div class="product-card-icon"><i class="fa-solid fa-cube"></i></div><span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span></div>'+
-    '<h3>'+h(p.name)+'</h3><p>'+h(p.description||'No description yet.')+'</p>'+
-    '<div class="product-card-meta"><span><i class="fa-solid fa-tag"></i> '+h(p.category||'resource')+'</span><span><i class="fa-solid fa-shield-halved"></i> '+h(p.protection_mode||'LICENSE_ONLY')+'</span></div>'+
-    '<div class="product-card-foot"><strong>'+money(p.price_cents,p.currency)+'</strong><div class="product-card-actions">'+(p.status!=='published'?'<button class="btn" data-publish="'+p.id+'">Publish</button>':'')+'<button class="btn primary" data-manage-product="'+p.id+'">Manage <i class="fa-solid fa-arrow-right"></i></button></div></div>'+
+  const icons={scripts:'fa-code',mlos:'fa-building',components:'fa-shirt',bots:'fa-robot',other:'fa-shapes'};
+  const category=String(p.category||'other').toLowerCase();
+  const icon=icons[category]||'fa-cube';
+  const protection=String(p.protection_mode||'LICENSE_ONLY').replaceAll('_',' ');
+  return '<article class="product-catalog-card category-'+h(category)+'" data-manage-product="'+p.id+'">'+
+    '<div class="product-card-top">'+
+      '<div class="product-card-icon"><i class="fa-solid '+icon+'"></i></div>'+
+      '<span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span>'+
+    '</div>'+
+    '<div class="product-card-body">'+
+      '<h3>'+h(p.name)+'</h3>'+
+      '<p>'+h(p.description||'No description yet.')+'</p>'+
+    '</div>'+
+    '<div class="product-card-meta">'+
+      '<span><i class="fa-solid fa-tag"></i> '+h(category)+'</span>'+
+      '<span><i class="fa-solid fa-shield-halved"></i> '+h(protection)+'</span>'+
+    '</div>'+
+    '<div class="product-card-foot">'+
+      '<div class="product-card-price"><span>Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div>'+
+      '<div class="product-card-actions">'+
+        (p.status!=='published'?'<button class="btn" data-publish="'+p.id+'"><i class="fa-solid fa-upload"></i> Publish</button>':'')+
+        '<button class="btn primary" data-manage-product="'+p.id+'">Manage <i class="fa-solid fa-arrow-right"></i></button>'+
+      '</div>'+
+    '</div>'+
   '</article>';
 }
 function openProductWorkspace(id){
