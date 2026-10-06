@@ -184,6 +184,38 @@ public class CoreResource {
             wid,name,forge.slug(forge.text(b,"slug").isBlank()?name:forge.text(b,"slug")),forge.text(b,"description"),forge.text(b,"category"),forge.longValue(b,"price_cents",0),forge.text(b,"currency").isBlank()?"EUR":forge.text(b,"currency"),forge.bool(b,"license_required",true),forge.text(b,"protection_mode").isBlank()?"LICENSE_ONLY":forge.text(b,"protection_mode"),"draft");
         forge.audit(wid,actor,"product.created",String.valueOf(pid),name); return ok(db.one("SELECT * FROM products WHERE id=?",pid));
     }
+    @GET @Path("/products/{pid}/workspace")
+    public Response productWorkspace(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session){
+        Map<String,Object> product=db.one("SELECT * FROM products WHERE id=?",pid);
+        if(product==null) throw new NotFoundException("product_not_found");
+        long wid=((Number)product.get("workspace_id")).longValue();
+        forge.requireWorkspace(uid(session),wid);
+
+        Map<String,Object> out=new LinkedHashMap<>();
+        out.put("product",product);
+        out.put("releases",db.query("SELECT id,product_id,version,changelog,file_name,published,created_at FROM releases WHERE product_id=? ORDER BY created_at DESC",pid));
+        out.put("licenses",db.query("""
+          SELECT l.id,l.user_id,l.product_id,l.license_key,l.status,l.server_limit,l.created_at,u.email,u.display_name
+          FROM licenses l JOIN users u ON u.id=l.user_id
+          WHERE l.product_id=? ORDER BY l.created_at DESC
+          """,pid));
+        Map<String,Object> protection=db.one("SELECT * FROM product_protection WHERE product_id=?",pid);
+        out.put("protection",protection==null?Map.of():protection);
+        out.put("installations",db.query("""
+          SELECT pi.*,u.email user_email
+          FROM protection_installations pi
+          JOIN licenses l ON l.id=pi.license_id
+          JOIN users u ON u.id=l.user_id
+          WHERE pi.product_id=? ORDER BY pi.last_seen_at DESC
+          """,pid));
+        out.put("builds",db.query("SELECT build_id,release_id,mode,status,created_at,revoked_at,revocation_reason FROM protection_builds WHERE product_id=? ORDER BY created_at DESC",pid));
+        out.put("entitlements",db.count("SELECT COUNT(*) FROM entitlements WHERE product_id=? AND status='active'",pid));
+        out.put("active_licenses",db.count("SELECT COUNT(*) FROM licenses WHERE product_id=? AND status='active'",pid));
+        out.put("active_installations",db.count("SELECT COUNT(*) FROM protection_installations WHERE product_id=? AND status='active'",pid));
+        out.put("purchases",db.count("SELECT COUNT(*) FROM purchase_threads WHERE product_id=?",pid));
+        return ok(out);
+    }
+
     @PUT @Path("/products/{pid}")
     public Response updateProduct(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf); Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found");
