@@ -225,3 +225,39 @@
   0%,100%{margin-top:0}
   50%{margin-top:-5px}
 }
+
+/* GPU-smoothed setup orbit nodes */
+.setup-node{
+  --node-x:0px;
+  --node-y:0px;
+  --node-float:6px;
+  transform:translate3d(var(--node-x),var(--node-y),0);
+  animation:setupNodeFloatGpu 7.2s cubic-bezier(.45,0,.55,1) infinite;
+  will-change:transform;
+  backface-visibility:hidden;
+  -webkit-font-smoothing:antialiased;
+  contain:layout paint style;
+}
+.node-a{--node-x:-120px;--node-y:-74px;animation-delay:-1.15s}
+.node-b{--node-x:130px;--node-y:-4px;animation-delay:-2.75s}
+.node-c{--node-x:-90px;--node-y:108px;animation-delay:-4.35s}
+
+.setup-core,
+.setup-orbit,
+.setup-node{
+  transform-style:preserve-3d;
+  backface-visibility:hidden;
+}
+
+.setup-orbit{
+  contain:paint;
+}
+
+@keyframes setupNodeFloatGpu{
+  0%,100%{
+    transform:translate3d(var(--node-x),var(--node-y),0);
+  }
+  50%{
+    transform:translate3d(var(--node-x),calc(var(--node-y) - var(--node-float)),0);
+  }
+}
