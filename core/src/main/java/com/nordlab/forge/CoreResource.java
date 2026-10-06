@@ -314,17 +314,46 @@ public class CoreResource {
         if(p==null) throw new NotFoundException("product_not_found");
         long wid=((Number)p.get("workspace_id")).longValue();
         forge.requireWorkspace(uid(session),wid);
+
         Map<String,Object> project=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
-        if(project==null){
-            project=new LinkedHashMap<>();
-            project.put("product_id",pid);
-            project.put("html","<div class=\"app-shell\">\n  <div class=\"panel\">\n    <h1>"+String.valueOf(p.get("name")).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")+"</h1>\n    <p>Build your FiveM NUI here.</p>\n    <button>Continue</button>\n  </div>\n</div>");
-            project.put("css","*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:transparent;color:#fff}.app-shell{min-height:100vh;display:grid;place-items:center;padding:32px}.panel{width:min(520px,92vw);padding:28px;border:1px solid #283044;border-radius:18px;background:#0b1018;box-shadow:0 24px 80px rgba(0,0,0,.45)}h1{margin:0 0 10px;font-size:30px}p{color:#9aa6ba}button{border:0;border-radius:10px;padding:11px 16px;background:#7b5cff;color:#fff;font-weight:800;cursor:pointer}");
-            project.put("js","document.querySelector('button')?.addEventListener('click',()=>console.log('NUI action'));");
-            project.put("settings_json","{\"viewport\":\"desktop\",\"background\":\"transparent\"}");
-            project.put("updated_at",null);
+        if(project!=null){
+            Map<String,Object> out=new LinkedHashMap<>(project);
+            out.put("source","saved");
+            out.put("detected",false);
+            return ok(out);
         }
-        return ok(project);
+
+        Map<String,Object> latest=db.one("""
+          SELECT id,version,file_name,storage_path,created_at
+          FROM releases
+          WHERE product_id=?
+          ORDER BY published DESC, created_at DESC
+          LIMIT 1
+          """,pid);
+
+        if(latest!=null){
+            Map<String,Object> imported=storage.importNuiFromRelease(String.valueOf(latest.get("storage_path")));
+            if(!imported.isEmpty()){
+                Map<String,Object> out=new LinkedHashMap<>(imported);
+                out.put("product_id",pid);
+                out.put("release_id",latest.get("id"));
+                out.put("release_version",latest.get("version"));
+                out.put("release_file_name",latest.get("file_name"));
+                out.put("updated_at",null);
+                return ok(out);
+            }
+        }
+
+        Map<String,Object> fallback=new LinkedHashMap<>();
+        fallback.put("product_id",pid);
+        fallback.put("html","<div class=\"app-shell\">\n  <div class=\"panel\">\n    <h1>"+String.valueOf(p.get("name")).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")+"</h1>\n    <p>Build your FiveM NUI here.</p>\n    <button>Continue</button>\n  </div>\n</div>");
+        fallback.put("css","*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:transparent;color:#fff}.app-shell{min-height:100vh;display:grid;place-items:center;padding:32px}.panel{width:min(520px,92vw);padding:28px;border:1px solid #283044;border-radius:18px;background:#0b1018;box-shadow:0 24px 80px rgba(0,0,0,.45)}h1{margin:0 0 10px;font-size:30px}p{color:#9aa6ba}button{border:0;border-radius:10px;padding:11px 16px;background:#7b5cff;color:#fff;font-weight:800;cursor:pointer}");
+        fallback.put("js","document.querySelector('button')?.addEventListener('click',()=>console.log('NUI action'));");
+        fallback.put("settings_json","{\"viewport\":\"desktop\",\"background\":\"transparent\"}");
+        fallback.put("updated_at",null);
+        fallback.put("source","template");
+        fallback.put("detected",false);
+        return ok(fallback);
     }
 
     @PUT @Path("/products/{pid}/nui")
