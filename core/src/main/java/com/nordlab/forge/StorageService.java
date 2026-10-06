@@ -244,10 +244,13 @@ public class StorageService {
             // Builder stores only the actual page body, not nested html/head wrappers.
             Matcher bodyMatcher=Pattern.compile("(?is)<body\\b[^>]*>(.*?)</body>").matcher(html);
             if(bodyMatcher.find()) html=bodyMatcher.group(1);
+            List<Map<String,Object>> previewMessages=extractNuiPreviewMessages(zip,entries);
+
             Map<String,Object> out=new LinkedHashMap<>();
             out.put("html",html);
             out.put("css",css.toString());
             out.put("js",js.toString());
+            out.put("preview_messages",previewMessages);
             out.put("settings_json","{\"viewport\":\"desktop\",\"background\":\"transparent\"}");
             out.put("source","release");
             out.put("source_entry",htmlPath);
@@ -255,6 +258,226 @@ public class StorageService {
             return out;
         }catch(IOException e){
             throw new IllegalStateException("nui_release_import_failed",e);
+        }
+    }
+
+    private List<Map<String,Object>> extractNuiPreviewMessages(ZipFile zip,Map<String,ZipEntry> entries)throws IOException{
+        List<Map<String,Object>> out=new ArrayList<>();
+        int inspected=0;
+        for(ZipEntry entry:entries.values()){
+            String name=normalizeZipName(entry.getName());
+            if(!name.toLowerCase(Locale.ROOT).endsWith(".lua")) continue;
+            if(entry.getSize()>2L*1024L*1024L) continue;
+            if(inspected++>40) break;
+
+            String lua=readZipText(zip,entry,2*1024*1024);
+            int cursor=0;
+            while(out.size()<32){
+                int call=lua.indexOf("SendNUIMessage",cursor);
+                if(call<0) break;
+                int open=lua.indexOf('{',call);
+                if(open<0){cursor=call+14;continue;}
+                String table=extractBalancedLuaTable(lua,open);
+                if(table==null){cursor=open+1;continue;}
+                cursor=open+table.length();
+
+                try{
+                    Object parsed=new LuaTableParser(table).parse();
+                    if(parsed instanceof Map<?,?> map && !map.isEmpty()){
+                        Map<String,Object> payload=new LinkedHashMap<>();
+                        map.forEach((k,v)->payload.put(String.valueOf(k),v));
+                        Map<String,Object> item=new LinkedHashMap<>();
+                        item.put("id","msg-"+out.size());
+                        item.put("label",nuiMessageLabel(payload,out.size()+1));
+                        item.put("source",name);
+                        item.put("payload",payload);
+                        item.put("priority",nuiMessagePriority(payload));
+                        out.add(item);
+                    }
+                }catch(RuntimeException ignored){}
+            }
+        }
+
+        out.sort((a,b)->Integer.compare(
+            ((Number)b.getOrDefault("priority",0)).intValue(),
+            ((Number)a.getOrDefault("priority",0)).intValue()
+        ));
+        return out;
+    }
+
+    private String extractBalancedLuaTable(String source,int start){
+        int depth=0;
+        boolean single=false,doubleQ=false,escape=false;
+        for(int i=start;i<source.length();i++){
+            char ch=source.charAt(i);
+            if(escape){escape=false;continue;}
+            if((single||doubleQ)&&ch=='\\'){escape=true;continue;}
+            if(!doubleQ&&ch=='\''){single=!single;continue;}
+            if(!single&&ch=='"'){doubleQ=!doubleQ;continue;}
+            if(single||doubleQ)continue;
+            if(ch=='{')depth++;
+            else if(ch=='}'){
+                depth--;
+                if(depth==0)return source.substring(start,i+1);
+            }
+        }
+        return null;
+    }
+
+    private String nuiMessageLabel(Map<String,Object> payload,int fallback){
+        for(String key:List.of("action","type","event","name","page","view","menu")){
+            Object v=payload.get(key);
+            if(v!=null&&!String.valueOf(v).isBlank()) return humanizePreviewLabel(String.valueOf(v));
+        }
+        for(String key:List.of("show","open","visible","display")){
+            Object v=payload.get(key);
+            if(Boolean.TRUE.equals(v)) return "Open UI "+fallback;
+        }
+        return "NUI message "+fallback;
+    }
+
+    private String humanizePreviewLabel(String value){
+        String s=value.replaceAll("([a-z])([A-Z])","$1 $2").replace('_',' ').replace('-',' ').trim();
+        if(s.isBlank())return "NUI event";
+        return Character.toUpperCase(s.charAt(0))+s.substring(1);
+    }
+
+    private int nuiMessagePriority(Map<String,Object> payload){
+        String marker="";
+        for(String key:List.of("action","type","event","name","page","view","menu")){
+            if(payload.get(key)!=null) marker+=" "+String.valueOf(payload.get(key)).toLowerCase(Locale.ROOT);
+        }
+        int score=0;
+        if(marker.matches(".*\\b(open|show|display|visible|start|enable|craft|admin|player)\\b.*"))score+=100;
+        for(String key:List.of("show","open","visible","display")){
+            if(Boolean.TRUE.equals(payload.get(key)))score+=80;
+        }
+        if(marker.matches(".*\\b(close|hide|disable)\\b.*"))score-=100;
+        return score;
+    }
+
+    private static final class LuaTableParser{
+        private final String s;
+        private int i=0;
+        LuaTableParser(String s){this.s=s;}
+
+        Object parse(){
+            skip();
+            return parseValue();
+        }
+
+        private Object parseValue(){
+            skip();
+            if(i>=s.length())return null;
+            char ch=s.charAt(i);
+            if(ch=='{')return parseTable();
+            if(ch=='\''||ch=='"')return parseString();
+            if(ch=='-'||Character.isDigit(ch))return parseNumber();
+            String word=parseWord();
+            if("true".equals(word))return true;
+            if("false".equals(word))return false;
+            if("nil".equals(word))return null;
+            return word;
+        }
+
+        private Object parseTable(){
+            expect('{');
+            LinkedHashMap<String,Object> map=new LinkedHashMap<>();
+            List<Object> array=new ArrayList<>();
+            boolean keyed=false;
+            int index=1;
+            while(true){
+                skip();
+                if(peek('}')){i++;break;}
+                int save=i;
+                String key=null;
+
+                if(peek('[')){
+                    i++;skip();
+                    Object raw=parseValue();
+                    skip();expect(']');
+                    skip();
+                    if(peek('=')){i++;key=String.valueOf(raw);keyed=true;}
+                    else{i=save;}
+                }else{
+                    String candidate=parseIdentifier();
+                    if(candidate!=null){
+                        skip();
+                        if(peek('=')){i++;key=candidate;keyed=true;}
+                        else i=save;
+                    }
+                }
+
+                Object value=parseValue();
+                if(key!=null) map.put(key,value);
+                else array.add(value);
+
+                skip();
+                if(peek(',')||peek(';'))i++;
+            }
+            if(!keyed)return array;
+            for(Object v:array)map.put(String.valueOf(index++),v);
+            return map;
+        }
+
+        private String parseString(){
+            char quote=s.charAt(i++);
+            StringBuilder out=new StringBuilder();
+            boolean esc=false;
+            while(i<s.length()){
+                char ch=s.charAt(i++);
+                if(esc){
+                    switch(ch){
+                        case 'n'->out.append('\n');
+                        case 'r'->out.append('\r');
+                        case 't'->out.append('\t');
+                        default->out.append(ch);
+                    }
+                    esc=false;continue;
+                }
+                if(ch=='\\'){esc=true;continue;}
+                if(ch==quote)break;
+                out.append(ch);
+            }
+            return out.toString();
+        }
+
+        private Number parseNumber(){
+            int start=i;
+            if(peek('-'))i++;
+            while(i<s.length()&&(Character.isDigit(s.charAt(i))||s.charAt(i)=='.'))i++;
+            String n=s.substring(start,i);
+            try{return n.contains(".")?Double.parseDouble(n):Long.parseLong(n);}
+            catch(NumberFormatException e){return 0;}
+        }
+
+        private String parseWord(){
+            String id=parseIdentifier();
+            return id==null?"":id;
+        }
+
+        private String parseIdentifier(){
+            skip();
+            if(i>=s.length())return null;
+            char first=s.charAt(i);
+            if(!(Character.isLetter(first)||first=='_'))return null;
+            int start=i++;
+            while(i<s.length()){
+                char ch=s.charAt(i);
+                if(!(Character.isLetterOrDigit(ch)||ch=='_'))break;
+                i++;
+            }
+            return s.substring(start,i);
+        }
+
+        private void skip(){
+            while(i<s.length()&&Character.isWhitespace(s.charAt(i)))i++;
+        }
+        private boolean peek(char ch){return i<s.length()&&s.charAt(i)==ch;}
+        private void expect(char ch){
+            skip();
+            if(!peek(ch))throw new IllegalArgumentException("lua_table_parse");
+            i++;
         }
     }
 
