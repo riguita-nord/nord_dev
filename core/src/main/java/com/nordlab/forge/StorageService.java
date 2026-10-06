@@ -17,7 +17,7 @@ public class StorageService {
         if(fileBase64==null||fileBase64.isBlank()) throw new BadRequestException("release_file_required");
         byte[] data;
         try{ data=Base64.getDecoder().decode(fileBase64); }catch(Exception e){ throw new BadRequestException("invalid_base64"); }
-        if(data.length>64*1024*1024) throw new BadRequestException("release_too_large");
+        if(data.length>512L*1024L*1024L) throw new BadRequestException("release_too_large_512mb");
         if(fileName==null||!fileName.toLowerCase().endsWith(".zip")) throw new BadRequestException("zip_required");
         try(ZipInputStream zin=new ZipInputStream(new ByteArrayInputStream(data))){
             if(zin.getNextEntry()==null) throw new BadRequestException("invalid_zip");
