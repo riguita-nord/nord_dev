@@ -442,30 +442,34 @@ return loadView();
 }
 function devProductCard(p){
   const icons={scripts:'fa-code',mlos:'fa-building',components:'fa-shirt',bots:'fa-robot',other:'fa-shapes'};
+  const labels={scripts:'Scripts',mlos:'MLOs',components:'Components',bots:'Bots',other:'Other'};
   const category=String(p.category||'other').toLowerCase();
   const icon=icons[category]||'fa-cube';
+  const categoryLabel=labels[category]||category;
   const protection=String(p.protection_mode||'LICENSE_ONLY').replaceAll('_',' ');
-  return '<article class="product-catalog-card category-'+h(category)+'" data-manage-product="'+p.id+'">'+
-    '<div class="product-card-top">'+
-      '<div class="product-card-icon"><i class="fa-solid '+icon+'"></i></div>'+
-      '<span class="pill '+(p.status==='published'?'good':'warn')+'">'+h(p.status)+'</span>'+
-    '</div>'+
-    '<div class="product-card-body">'+
+  const published=p.status==='published';
+  return '<article class="product-catalog-card product-card-v2 category-'+h(category)+'" data-manage-product="'+p.id+'">'+
+    '<div class="product-card-accent"></div>'+
+    '<header class="product-card-v2-head">'+
+      '<div class="product-card-brand">'+
+        '<div class="product-card-icon"><i class="fa-solid '+icon+'"></i></div>'+
+        '<div class="product-card-kind"><span>Product</span><strong>'+h(categoryLabel)+'</strong></div>'+
+      '</div>'+
+      '<span class="product-status '+(published?'published':'draft')+'"><i class="fa-solid '+(published?'fa-circle-check':'fa-clock')+'"></i> '+h(p.status)+'</span>'+
+    '</header>'+
+    '<div class="product-card-v2-main">'+
       '<h3>'+h(p.name)+'</h3>'+
       '<p>'+h(p.description||'No description yet.')+'</p>'+
     '</div>'+
-    '<div class="product-card-meta">'+
-      '<span><i class="fa-solid fa-tag"></i> '+h(category)+'</span>'+
-      '<span><i class="fa-solid fa-shield-halved"></i> '+h(protection)+'</span>'+
+    '<div class="product-card-v2-info">'+
+      '<div><span><i class="fa-solid fa-shield-halved"></i> Protection</span><strong>'+h(protection)+'</strong></div>'+
+      '<div><span><i class="fa-solid fa-coins"></i> Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div>'+
     '</div>'+
-    '<div class="product-card-foot">'+
-      '<div class="product-card-price"><span>Price</span><strong>'+money(p.price_cents,p.currency)+'</strong></div>'+
-      '<div class="product-card-actions">'+
-        (p.status!=='published'?'<button class="btn" data-publish="'+p.id+'"><i class="fa-solid fa-upload"></i> Publish</button>':'')+
-        '<button class="btn nui-card-btn" data-open-nui="'+p.id+'"><i class="fa-solid fa-pen-ruler"></i> NUI Builder</button>'+
-        '<button class="btn primary" data-manage-product="'+p.id+'">Manage <i class="fa-solid fa-arrow-right"></i></button>'+
-      '</div>'+
-    '</div>'+
+    '<footer class="product-card-v2-actions">'+
+      '<button class="product-action-secondary" data-open-nui="'+p.id+'"><i class="fa-solid fa-pen-ruler"></i><span>NUI Builder</span></button>'+
+      (p.status!=='published'?'<button class="product-action-secondary" data-publish="'+p.id+'"><i class="fa-solid fa-upload"></i><span>Publish</span></button>':'')+
+      '<button class="product-action-primary" data-manage-product="'+p.id+'"><span>Manage product</span><i class="fa-solid fa-arrow-right"></i></button>'+
+    '</footer>'+
   '</article>';
 }
 function openProductWorkspace(id){
