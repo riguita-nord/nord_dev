@@ -855,7 +855,7 @@ function createProduct(){
     };
     document.querySelector('#product-wizard-back').onclick=()=>{if(draft.step>1){draft.step--;draw()}};
     const next=document.querySelector('#product-wizard-next');
-    if(next)next.onclick=()=>{
+    if(next)next.onclick=async()=>{
       if(draft.step===1){
         if(draft.name.trim().length<2)return toast('Enter a product name.');
         if(!draft.slug.trim())draft.slug=draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
