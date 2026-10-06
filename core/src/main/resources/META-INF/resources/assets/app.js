@@ -518,6 +518,9 @@ function renderProductWorkspace(d){
             '<button class="nui-view-btn active" data-nui-view="desktop" title="Desktop"><i class="fa-solid fa-desktop"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="tablet" title="Tablet"><i class="fa-solid fa-tablet-screen-button"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="mobile" title="Mobile"><i class="fa-solid fa-mobile-screen-button"></i></button>'+
+            '<span class="nui-toolbar-separator"></span>'+
+            '<button class="nui-view-btn active" id="nui-fit-ui" title="Fit selected UI"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>'+
+            '<span class="nui-zoom-label" id="nui-zoom-label">Fit</span>'+
           '</div>'+
           '<div class="nui-builder-toolbar-actions">'+
             '<button class="btn" id="nui-refresh"><i class="fa-solid fa-rotate-right"></i> Preview</button>'+
@@ -722,43 +725,99 @@ async function initNuiBuilder(p){
     picker.parentElement.classList.toggle('multiple',items.length>1);
   };
 
-  const previewCss=source=>String(source||'')
-    // Builder preview must not inherit FiveM's "closed by default" state.
-    .replace(/display\s*:\s*none\s*;?/gi,'')
-    .replace(/visibility\s*:\s*hidden\s*;?/gi,'')
-    .replace(/opacity\s*:\s*0(?:\.0+)?\s*;?/gi,'');
+  // Keep the resource CSS untouched. The builder only forces the selected root visible.
+  // Internal modals/overlays keep their original hidden/open state and remain functional.
+  const previewCss=source=>String(source||'');
+
+  let autoFitUi=settings.auto_fit_ui!==false;
+  let interfaceZoom=1;
+
+  const applyCanvasZoom=()=>{
+    if(!canvas||!stage)return;
+    const sizes={desktop:[1920,1080],tablet:[1024,1366],mobile:[390,844]};
+    const size=sizes[settings.viewport||'desktop']||sizes.desktop;
+    const availableW=Math.max(1,stage.clientWidth-20);
+    const availableH=Math.max(1,stage.clientHeight-20);
+    const base=Math.min(availableW/size[0],availableH/size[1],1);
+    const scale=Math.min(base*interfaceZoom,2.6);
+    canvas.style.width=size[0]+'px';
+    canvas.style.height=size[1]+'px';
+    canvas.style.transform='scale('+scale+')';
+    canvas.style.transformOrigin='center center';
+    const label=document.querySelector('#nui-zoom-label');
+    if(label)label.textContent=autoFitUi?'Fit':Math.round(interfaceZoom*100)+'%';
+  };
+
+  const previewRuntime=selected=>`
+    (()=>{
+      const selected=${JSON.stringify(selected)};
+
+      // Safe FiveM browser-preview shims. They never affect exported/saved source.
+      if(typeof window.GetParentResourceName!=='function')window.GetParentResourceName=()=> 'nord_preview';
+      if(typeof window.invokeNative!=='function')window.invokeNative=()=>{};
+      const originalFetch=window.fetch?window.fetch.bind(window):null;
+      window.fetch=(input,init)=>{
+        const url=String(input&&input.url?input.url:input||'');
+        if(/^https:\\/\\/[^/]+\\//i.test(url)||url.startsWith('nui://')||url.startsWith('https://cfx-nui-')){
+          return Promise.resolve(new Response('{}',{status:200,headers:{'Content-Type':'application/json'}}));
+        }
+        return originalFetch?originalFetch(input,init):Promise.resolve(new Response('{}',{status:200}));
+      };
+
+      const roots=[...document.querySelectorAll('[data-nord-interface]')];
+      const selectedRoot=selected==='all'?null:roots.find(el=>el.getAttribute('data-nord-interface')===selected);
+
+      // Only root visibility is overridden. Nested modals preserve the resource's CSS/JS state.
+      roots.forEach(el=>{
+        if(!selectedRoot||el===selectedRoot){
+          if(el===selectedRoot){
+            el.style.setProperty('display','block','important');
+            el.style.setProperty('visibility','visible','important');
+            el.style.setProperty('opacity','1','important');
+            el.hidden=false;
+          }
+        }else{
+          el.style.setProperty('display','none','important');
+        }
+      });
+
+      const reportBounds=()=>{
+        const target=selectedRoot||document.body;
+        const r=target.getBoundingClientRect();
+        let left=r.left,top=r.top,right=r.right,bottom=r.bottom;
+        target.querySelectorAll('*').forEach(el=>{
+          const s=getComputedStyle(el);
+          if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return;
+          const b=el.getBoundingClientRect();
+          if(b.width<2||b.height<2)return;
+          left=Math.min(left,b.left);top=Math.min(top,b.top);right=Math.max(right,b.right);bottom=Math.max(bottom,b.bottom);
+        });
+        parent.postMessage({
+          type:'nord-nui-preview-bounds',
+          width:Math.max(1,right-left),
+          height:Math.max(1,bottom-top),
+          viewportWidth:innerWidth,
+          viewportHeight:innerHeight
+        },'*');
+      };
+      setTimeout(reportBounds,80);
+      setTimeout(reportBounds,450);
+      addEventListener('resize',reportBounds);
+    })();
+  `;
 
   const renderPreview=()=>{
     const detected=detectInterfaces(html.value);
     refreshInterfacePicker(detected.items);
     const selected=selectedInterface;
     const isolation=selected==='all'?'':[
-      '[data-nord-interface]{display:none!important;visibility:hidden!important;opacity:0!important;}',
+      '[data-nord-interface]{display:none!important;}',
       '[data-nord-interface="'+selected+'"]{display:block!important;visibility:visible!important;opacity:1!important;}'
     ].join('');
-    const guardScript=selected==='all'?'':`
-      (()=>{
-        const id=${JSON.stringify(selected)};
-        const keep=()=>{
-          document.querySelectorAll('[data-nord-interface]').forEach(el=>{
-            if(el.getAttribute('data-nord-interface')===id){
-              el.style.setProperty('display','block','important');
-              el.style.setProperty('visibility','visible','important');
-              el.style.setProperty('opacity','1','important');
-              el.hidden=false;
-              el.classList.remove('hide','hidden','d-none');
-            }else{
-              el.style.setProperty('display','none','important');
-            }
-          });
-        };
-        keep();
-        new MutationObserver(keep).observe(document.body,{subtree:true,attributes:true,attributeFilter:['style','class','hidden']});
-      })();
-    `;
-    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;}'+previewCss(css.value)+isolation+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+guardScript.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    const runtime=previewRuntime(selected);
+    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+isolation+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
     frame.srcdoc=documentHtml;
-    requestAnimationFrame(fitPreview);
+    requestAnimationFrame(applyCanvasZoom);
   };
 
   const markDirty=()=>{
@@ -773,25 +832,7 @@ async function initNuiBuilder(p){
     document.querySelectorAll('[data-nui-pane]').forEach(x=>x.classList.toggle('active',x.dataset.nuiPane===btn.dataset.nuiCode));
   });
 
-  const fitPreview=()=>{
-    if(!stage||!canvas)return;
-    const sizes={
-      desktop:[1920,1080],
-      tablet:[1024,1366],
-      mobile:[390,844]
-    };
-    const view=settings.viewport||'desktop';
-    const size=sizes[view]||sizes.desktop;
-    const availableW=Math.max(1,stage.clientWidth-24);
-    const availableH=Math.max(1,stage.clientHeight-24);
-    const scale=Math.min(availableW/size[0],availableH/size[1],1);
-    canvas.style.width=size[0]+'px';
-    canvas.style.height=size[1]+'px';
-    canvas.style.transform='scale('+scale+')';
-    canvas.style.transformOrigin='center center';
-    stage.style.setProperty('--nui-canvas-w',(size[0]*scale)+'px');
-    stage.style.setProperty('--nui-canvas-h',(size[1]*scale)+'px');
-  };
+  const fitPreview=()=>applyCanvasZoom();
 
   const setViewport=view=>{
     settings.viewport=view;
@@ -808,6 +849,28 @@ async function initNuiBuilder(p){
     renderPreview();
   };
   selectedInterface=settings.interface||'all';
+
+  const fitButton=document.querySelector('#nui-fit-ui');
+  if(fitButton)fitButton.onclick=()=>{
+    autoFitUi=!autoFitUi;
+    settings.auto_fit_ui=autoFitUi;
+    fitButton.classList.toggle('active',autoFitUi);
+    if(!autoFitUi)interfaceZoom=1;
+    renderPreview();
+  };
+
+  const previewMessage=e=>{
+    const data=e.data||{};
+    if(data.type!=='nord-nui-preview-bounds'||!autoFitUi)return;
+    const vw=Math.max(1,Number(data.viewportWidth)||1920);
+    const vh=Math.max(1,Number(data.viewportHeight)||1080);
+    const iw=Math.max(1,Number(data.width)||vw);
+    const ih=Math.max(1,Number(data.height)||vh);
+    // Increase small/centered NUIs, but keep some breathing room and avoid absurd zoom.
+    interfaceZoom=Math.max(1,Math.min(2.25,(Math.min(vw/iw,vh/ih))*0.84));
+    applyCanvasZoom();
+  };
+  window.addEventListener('message',previewMessage);
 
   const snippets={
     container:'\n<div class="container">\n  <!-- content -->\n</div>\n',
