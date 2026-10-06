@@ -131,7 +131,7 @@ function renderSetup(){
     if(next)next.onclick=()=>{
       if(setup.step===1){
         if(setup.name.trim().length<2)return toast('Enter a display name.');
-        if(!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(setup.email.trim()))return toast('Enter a valid email address.');
+        if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(setup.email.trim()))return toast('Enter a valid email address.');
       }
       if(setup.step===2&&setup.password.length<10)return toast('Password must have at least 10 characters.');
       setup.step++;render();
