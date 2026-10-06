@@ -23,6 +23,17 @@ public class CoreResource {
     private Response ok(Object value){ return Response.ok(value).build(); }
     private Map<String,Object> body(Map<String,Object> b){ return b==null?new HashMap<>():b; }
 
+    @GET @Path("/setup/status")
+    public Response setupStatus(){
+        long users=db.count("SELECT COUNT(*) FROM users");
+        return ok(Map.of(
+            "ok",true,
+            "needs_setup",users==0,
+            "registration_enabled",true,
+            "users",users
+        ));
+    }
+
     @POST @Path("/auth/register")
     public Response register(Map<String,Object> b){
         b=body(b); var s=security.register(forge.text(b,"email"),forge.text(b,"password"),forge.text(b,"display_name"));
