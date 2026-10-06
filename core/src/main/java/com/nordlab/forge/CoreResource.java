@@ -278,8 +278,11 @@ public class CoreResource {
                     pid,version,forge.text(b,"release_changelog"),fileName,storagePath);
             }
 
+            db.execute("UPDATE products SET status='published' WHERE id=?",pid);
+
             forge.audit(wid,actor,reused?"product.recovered":"product.created",String.valueOf(pid),name);
             forge.audit(wid,actor,releaseReplaced?"release.replaced":"release.created",String.valueOf(rid),version);
+            forge.audit(wid,actor,"product.published",String.valueOf(pid),version);
 
             Map<String,Object> out=new LinkedHashMap<>();
             out.put("ok",true);
@@ -342,7 +345,9 @@ public class CoreResource {
         unsafe(session,csrf); Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found");
         long wid=((Number)p.get("workspace_id")).longValue(), actor=uid(session); forge.requireWorkspace(actor,wid,"developer","admin"); b=body(b);
         String status=forge.text(b,"status"); if(status.isBlank()) status=String.valueOf(p.get("status"));
-        if("published".equals(status)&&db.count("SELECT COUNT(*) FROM releases WHERE product_id=? AND published=TRUE",pid)==0) throw new BadRequestException("published_release_required");
+        long publishedReleaseCount=db.count("SELECT COUNT(*) FROM releases WHERE product_id=? AND published=TRUE",pid);
+        if(publishedReleaseCount>0) status="published";
+        if("published".equals(status)&&publishedReleaseCount==0) throw new BadRequestException("published_release_required");
         db.execute("UPDATE products SET name=?,description=?,category=?,price_cents=?,currency=?,license_required=?,protection_mode=?,status=? WHERE id=?",
             forge.text(b,"name").isBlank()?p.get("name"):forge.text(b,"name"),forge.text(b,"description"),forge.text(b,"category"),forge.longValue(b,"price_cents",((Number)p.get("price_cents")).longValue()),forge.text(b,"currency").isBlank()?p.get("currency"):forge.text(b,"currency"),forge.bool(b,"license_required",Boolean.TRUE.equals(p.get("license_required"))),forge.text(b,"protection_mode").isBlank()?p.get("protection_mode"):forge.text(b,"protection_mode"),status,pid);
         forge.audit(wid,actor,"product.updated",String.valueOf(pid),status); return ok(db.one("SELECT * FROM products WHERE id=?",pid));
