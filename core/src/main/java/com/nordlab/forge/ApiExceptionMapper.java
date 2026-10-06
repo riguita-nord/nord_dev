@@ -15,7 +15,34 @@ public class ApiExceptionMapper implements ExceptionMapper<WebApplicationExcepti
     public Response toResponse(WebApplicationException exception) {
         Response original=exception.getResponse();
         int status=original==null?500:original.getStatus();
-        String message=exception.getMessage();
+
+        String message=null;
+        if(original!=null && original.hasEntity()){
+            Object entity=original.getEntity();
+            if(entity instanceof Map<?,?> map){
+                Object m=map.get("message");
+                if(m==null) m=map.get("error");
+                if(m!=null) message=String.valueOf(m);
+            }else if(entity instanceof String s && !s.isBlank()){
+                message=s;
+            }
+        }
+
+        String exceptionMessage=exception.getMessage();
+        if((message==null||message.isBlank()) &&
+           exceptionMessage!=null &&
+           !exceptionMessage.isBlank() &&
+           !exceptionMessage.matches("HTTP \\d{3} .*")){
+            message=exceptionMessage;
+        }
+
+        Throwable cause=exception.getCause();
+        while((message==null||message.isBlank()) && cause!=null){
+            String causeMessage=cause.getMessage();
+            if(causeMessage!=null&&!causeMessage.isBlank()) message=causeMessage;
+            cause=cause.getCause();
+        }
+
         if(message==null||message.isBlank()) message="http_"+status;
 
         Map<String,Object> body=new LinkedHashMap<>();
