@@ -145,7 +145,7 @@ function renderSetup(){
     const back=document.querySelector('#setup-back');
     if(back)back.onclick=()=>{if(setup.step>1){setup.step--;render()}};
     const next=document.querySelector('#setup-next');
-    if(next)next.onclick=()=>{
+    if(next)next.onclick=async()=>{
       if(setup.step===1){
         if(setup.name.trim().length<2)return toast('Enter a display name.');
         if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(setup.email.trim()))return toast('Enter a valid email address.');
@@ -865,6 +865,7 @@ function createProduct(){
       if(draft.step===4){
         if(!draft.release_version.trim())return toast('Enter the first release version.');
         if(!draft.release_file)return toast('Select the ZIP for the first release.');
+        try{await validateZipFile(draft.release_file)}catch(err){return toast(err.message)}
       }
       draft.step++;draw();
     };
@@ -873,6 +874,7 @@ function createProduct(){
       create.disabled=true;
       create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
       try{
+        await validateZipFile(draft.release_file);
         const base64=await fileBase64(draft.release_file);
         const result=await api('/workspaces/'+state.workspace.id+'/products/bootstrap',{method:'POST',body:JSON.stringify({
           name:draft.name.trim(),
@@ -896,7 +898,16 @@ function createProduct(){
         toast(result.recovered?'Recovered draft and created first release':'Product and first release created');
         renderShell();loadView();
       }catch(e){
-        toast(e.message);
+        const friendly={
+          release_file_required:'Select the ZIP for the first release.',
+          invalid_base64:'The release file could not be encoded.',
+          zip_required:'The release file must be a ZIP archive.',
+          invalid_zip:'The selected file is not a valid ZIP archive.',
+          release_too_large_512mb:'The release ZIP exceeds the 512 MB limit.',
+          product_slug_taken:'A published product already uses this slug.',
+          release_version_required:'Enter the first release version.'
+        };
+        toast(friendly[e.message]||e.message);
         create.disabled=false;
         create.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Create product & release';
       }
@@ -907,6 +918,19 @@ function createProduct(){
 async function publishProduct(id){try{const products=await api('/workspaces/'+state.workspace.id+'/products');const p=products.find(x=>String(x.id)===String(id));await api('/products/'+id,{method:'PUT',body:JSON.stringify({name:p.name,description:p.description,category:p.category,price_cents:p.price_cents,currency:p.currency,license_required:p.license_required,protection_mode:p.protection_mode,status:'published'})});toast('Product published');loadView()}catch(e){toast(e.message)}}
 function createRelease(products){if(!products.length)return toast('Create a product first.');modal('Upload release','<form class="form"><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div><div class="field"><label>Version</label><input name="version" placeholder="2.0.0" required></div><div class="field"><label>ZIP file</label><input name="file" type="file" accept=".zip" required></div><div class="field"><label>Changelog</label><textarea name="changelog" rows="5"></textarea></div></form>',async fd=>{const file=fd.get('file');if(!file||!file.size)throw new Error('ZIP file required');const base64=await fileBase64(file);await api('/products/'+formVal(fd,'product_id')+'/releases',{method:'POST',body:JSON.stringify({version:formVal(fd,'version'),file_name:file.name,file_base64:base64,changelog:formVal(fd,'changelog'),published:true})});toast('Release uploaded');loadView()})}
 function fileBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)})}
+async function validateZipFile(file){
+  if(!file||!file.size)throw new Error('Select the ZIP for the first release.');
+  if(!file.name.toLowerCase().endsWith('.zip'))throw new Error('The release file must use the .zip extension.');
+  if(file.size>512*1024*1024)throw new Error('The release ZIP exceeds the 512 MB limit.');
+  const head=new Uint8Array(await file.slice(0,4).arrayBuffer());
+  const valid=head.length>=4&&head[0]===0x50&&head[1]===0x4b&&(
+    (head[2]===0x03&&head[3]===0x04)||
+    (head[2]===0x05&&head[3]===0x06)||
+    (head[2]===0x07&&head[3]===0x08)
+  );
+  if(!valid)throw new Error('The selected file is not a valid ZIP archive.');
+  return true;
+}
 async function grantLicense(){const products=await api('/workspaces/'+state.workspace.id+'/products');modal('Grant license','<form class="form"><div class="field"><label>Customer email</label><input name="email" type="email" required></div><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/licenses',{method:'POST',body:JSON.stringify({email:formVal(fd,'email'),product_id:Number(formVal(fd,'product_id'))})});toast('License granted');loadView()})}
 function createDoc(){modal('Documentation page','<form class="form"><div class="field"><label>Title</label><input name="title" required></div><div class="field"><label>Slug</label><input name="slug"></div><div class="field"><label>Content</label><textarea name="body" rows="12"></textarea></div><div class="field"><label><input name="published" type="checkbox" value="true"> Published</label></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/docs',{method:'POST',body:JSON.stringify({title:formVal(fd,'title'),slug:formVal(fd,'slug'),body:formVal(fd,'body'),published:fd.get('published')==='true'})});toast('Documentation saved');loadView()})}
 function createPage(){modal('Website page','<form class="form"><div class="field"><label>Title</label><input name="title" required></div><div class="field"><label>Slug</label><input name="slug"></div><div class="field"><label>Theme</label><select name="theme"><option>light</option><option>dark</option></select></div><div class="field"><label>Layout JSON</label><textarea name="layout_json" rows="12" placeholder="{&quot;blocks&quot;:[]}"></textarea></div><div class="field"><label><input name="published" type="checkbox" value="true"> Published</label></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/pages',{method:'POST',body:JSON.stringify({title:formVal(fd,'title'),slug:formVal(fd,'slug'),theme:formVal(fd,'theme'),layout_json:formVal(fd,'layout_json'),published:fd.get('published')==='true'})});toast('Page saved');loadView()})}
