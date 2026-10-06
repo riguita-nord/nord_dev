@@ -308,6 +308,51 @@ public class CoreResource {
         }
     }
 
+    @GET @Path("/products/{pid}/nui")
+    public Response nuiProject(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session){
+        Map<String,Object> p=db.one("SELECT id,workspace_id,name,slug FROM products WHERE id=?",pid);
+        if(p==null) throw new NotFoundException("product_not_found");
+        long wid=((Number)p.get("workspace_id")).longValue();
+        forge.requireWorkspace(uid(session),wid);
+        Map<String,Object> project=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
+        if(project==null){
+            project=new LinkedHashMap<>();
+            project.put("product_id",pid);
+            project.put("html","<div class=\"app-shell\">\n  <div class=\"panel\">\n    <h1>"+String.valueOf(p.get("name")).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")+"</h1>\n    <p>Build your FiveM NUI here.</p>\n    <button>Continue</button>\n  </div>\n</div>");
+            project.put("css","*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:transparent;color:#fff}.app-shell{min-height:100vh;display:grid;place-items:center;padding:32px}.panel{width:min(520px,92vw);padding:28px;border:1px solid #283044;border-radius:18px;background:#0b1018;box-shadow:0 24px 80px rgba(0,0,0,.45)}h1{margin:0 0 10px;font-size:30px}p{color:#9aa6ba}button{border:0;border-radius:10px;padding:11px 16px;background:#7b5cff;color:#fff;font-weight:800;cursor:pointer}");
+            project.put("js","document.querySelector('button')?.addEventListener('click',()=>console.log('NUI action'));");
+            project.put("settings_json","{\"viewport\":\"desktop\",\"background\":\"transparent\"}");
+            project.put("updated_at",null);
+        }
+        return ok(project);
+    }
+
+    @PUT @Path("/products/{pid}/nui")
+    public Response saveNuiProject(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
+        unsafe(session,csrf);
+        Map<String,Object> p=db.one("SELECT id,workspace_id FROM products WHERE id=?",pid);
+        if(p==null) throw new NotFoundException("product_not_found");
+        long wid=((Number)p.get("workspace_id")).longValue(),actor=uid(session);
+        forge.requireWorkspace(actor,wid,"developer","admin");
+        b=body(b);
+
+        String html=forge.text(b,"html");
+        String css=forge.text(b,"css");
+        String js=forge.text(b,"js");
+        String settings=forge.text(b,"settings_json");
+        if(settings.isBlank()) settings="{\"viewport\":\"desktop\",\"background\":\"transparent\"}";
+
+        if(db.count("SELECT COUNT(*) FROM nui_projects WHERE product_id=?",pid)>0){
+            db.execute("UPDATE nui_projects SET html=?,css=?,js=?,settings_json=?,updated_at=CURRENT_TIMESTAMP WHERE product_id=?",
+                html,css,js,settings,pid);
+        }else{
+            db.execute("INSERT INTO nui_projects(product_id,html,css,js,settings_json,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)",
+                pid,html,css,js,settings);
+        }
+        forge.audit(wid,actor,"nui.saved",String.valueOf(pid),null);
+        return ok(db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid));
+    }
+
     @GET @Path("/products/{pid}/workspace")
     public Response productWorkspace(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session){
         Map<String,Object> product=db.one("SELECT * FROM products WHERE id=?",pid);
