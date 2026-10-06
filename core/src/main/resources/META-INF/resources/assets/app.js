@@ -514,6 +514,11 @@ function renderProductWorkspace(d){
               '<i class="fa-solid fa-layer-group"></i>'+
               '<select id="nui-interface-select"><option value="all">All interfaces</option></select>'+
             '</div>'+
+            '<div class="nui-runtime-control" title="FiveM runtime scenario">'+
+              '<i class="fa-solid fa-bolt"></i>'+
+              '<select id="nui-runtime-select"><option value="">No runtime events</option></select>'+
+              '<button id="nui-runtime-replay" title="Replay SendNUIMessage"><i class="fa-solid fa-play"></i></button>'+
+            '</div>'+
             '<span class="nui-toolbar-separator"></span>'+
             '<button class="nui-view-btn active" data-nui-view="desktop" title="Desktop"><i class="fa-solid fa-desktop"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="tablet" title="Tablet"><i class="fa-solid fa-tablet-screen-button"></i></button>'+
@@ -629,6 +634,7 @@ async function initNuiBuilder(p){
   html.value=project.html||'';
   css.value=project.css||'';
   js.value=project.js||'';
+  const previewMessages=Array.isArray(project.preview_messages)?project.preview_messages:[];
   const sourceLabel=document.querySelector('#nui-builder-source');
   if(project.source==='release'){
     const release=project.release_version?'v'+project.release_version:'release';
@@ -903,6 +909,57 @@ async function initNuiBuilder(p){
     })();
   `;
 
+  let selectedRuntime=settings.runtime_event||((previewMessages[0]&&previewMessages[0].id)||'');
+
+  const runtimeSelect=document.querySelector('#nui-runtime-select');
+  const runtimeReplay=document.querySelector('#nui-runtime-replay');
+
+  const runtimePayload=()=>{
+    const item=previewMessages.find(x=>String(x.id)===String(selectedRuntime));
+    return item&&item.payload?item:null;
+  };
+
+  const refreshRuntimePicker=()=>{
+    if(!runtimeSelect)return;
+    runtimeSelect.innerHTML='<option value="">No runtime events</option>'+previewMessages.map(x=>
+      '<option value="'+h(x.id)+'">'+h(x.label||x.id)+'</option>'
+    ).join('');
+    if(selectedRuntime&&previewMessages.some(x=>String(x.id)===String(selectedRuntime)))runtimeSelect.value=selectedRuntime;
+    else if(previewMessages.length){
+      selectedRuntime=String(previewMessages[0].id);
+      runtimeSelect.value=selectedRuntime;
+      settings.runtime_event=selectedRuntime;
+    }
+    runtimeSelect.parentElement.classList.toggle('active',previewMessages.length>0);
+  };
+
+  const findInterfaceForRuntime=item=>{
+    const picker=document.querySelector('#nui-interface-select');
+    if(!picker||!item)return null;
+    const hay=(String(item.label||'')+' '+JSON.stringify(item.payload||{})).toLowerCase();
+    const options=[...picker.options].filter(o=>o.value!=='all');
+    const scored=options.map(o=>{
+      const key=(o.value+' '+o.textContent).toLowerCase();
+      let score=0;
+      key.split(/[^a-z0-9]+/).filter(x=>x.length>3).forEach(token=>{if(hay.includes(token))score+=5});
+      if(hay.includes('admin')&&key.includes('admin'))score+=20;
+      if(hay.includes('player')&&key.includes('player'))score+=20;
+      if((hay.includes('craft')||hay.includes('recipe'))&&(key.includes('craft')||key.includes('player')))score+=10;
+      return {value:o.value,score};
+    }).sort((a,b)=>b.score-a.score);
+    return scored[0]&&scored[0].score>0?scored[0].value:null;
+  };
+
+  const replayRuntime=()=>{
+    const item=runtimePayload();
+    if(!item||!frame.contentWindow)return;
+    try{
+      frame.contentWindow.postMessage(item.payload,'*');
+      const stateEl=document.querySelector('#nui-save-state');
+      if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-bolt"></i> Runtime: '+h(item.label||'SendNUIMessage');
+    }catch(e){}
+  };
+
   const renderPreview=()=>{
     const detected=detectInterfaces(html.value);
     refreshInterfacePicker(detected.items);
@@ -910,6 +967,12 @@ async function initNuiBuilder(p){
     const runtime=previewRuntime(selected);
     const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
     lastInterfaceBounds=null;
+    frame.onload=()=>{
+      setTimeout(()=>{
+        replayRuntime();
+        setTimeout(replayRuntime,180);
+      },70);
+    };
     frame.srcdoc=documentHtml;
     requestAnimationFrame(applyCanvasZoom);
   };
@@ -945,6 +1008,25 @@ async function initNuiBuilder(p){
     renderPreview();
   };
   selectedInterface=settings.interface||'all';
+
+  refreshRuntimePicker();
+  if(runtimeSelect)runtimeSelect.onchange=()=>{
+    selectedRuntime=runtimeSelect.value||'';
+    settings.runtime_event=selectedRuntime;
+    const item=runtimePayload();
+    const target=findInterfaceForRuntime(item);
+    if(target&&target!==selectedInterface){
+      selectedInterface=target;
+      settings.interface=target;
+      const picker=document.querySelector('#nui-interface-select');
+      if(picker)picker.value=target;
+      lastInterfaceBounds=null;
+      renderPreview();
+    }else{
+      replayRuntime();
+    }
+  };
+  if(runtimeReplay)runtimeReplay.onclick=()=>replayRuntime();
 
   const fitButton=document.querySelector('#nui-fit-ui');
   if(fitButton)fitButton.onclick=()=>{
@@ -1025,6 +1107,19 @@ async function initNuiBuilder(p){
 
   if(stateLabel && project.source!=='release')stateLabel.innerHTML='<i class="fa-solid fa-circle-check"></i> Project loaded';
   renderPreview();
+  setTimeout(()=>{
+    const item=runtimePayload();
+    const target=findInterfaceForRuntime(item);
+    if(target&&target!==selectedInterface){
+      selectedInterface=target;
+      settings.interface=target;
+      const picker=document.querySelector('#nui-interface-select');
+      if(picker)picker.value=target;
+      renderPreview();
+    }else{
+      replayRuntime();
+    }
+  },250);
   const resizeObserver=new ResizeObserver(()=>fitPreview());
   resizeObserver.observe(stage);
 }
