@@ -253,8 +253,13 @@ public class StorageService {
             out.put("source_entry",htmlPath);
             out.put("detected",true);
             return out;
-        }catch(IOException e){
-            throw new IllegalStateException("nui_release_import_failed",e);
+        }catch(IOException|RuntimeException e){
+            // A broken or unconventional NUI must never take the whole Product Workspace down.
+            // The caller can fall back to direct/live preview or the blank builder template.
+            return Map.of(
+                "import_error","nui_release_import_failed",
+                "import_error_detail",String.valueOf(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage())
+            );
         }
     }
 
@@ -713,6 +718,13 @@ public class StorageService {
 
     private String mimeFor(String path){
         String low=path.toLowerCase(Locale.ROOT);
+        if(low.endsWith(".html")||low.endsWith(".htm"))return "text/html";
+        if(low.endsWith(".css"))return "text/css";
+        if(low.endsWith(".js")||low.endsWith(".mjs"))return "text/javascript";
+        if(low.endsWith(".json")||low.endsWith(".map"))return "application/json";
+        if(low.endsWith(".wasm"))return "application/wasm";
+        if(low.endsWith(".txt"))return "text/plain";
+        if(low.endsWith(".xml"))return "application/xml";
         if(low.endsWith(".png"))return "image/png";
         if(low.endsWith(".jpg")||low.endsWith(".jpeg"))return "image/jpeg";
         if(low.endsWith(".webp"))return "image/webp";
