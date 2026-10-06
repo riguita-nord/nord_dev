@@ -1999,3 +1999,210 @@
   .product-processing-modal h2{font-size:23px}
   .product-processing-steps small{display:none}
 }
+
+/* PC -> file -> server transfer animation */
+.upload-transfer-visual{
+  width:min(520px,100%);
+  display:grid;
+  grid-template-columns:88px minmax(160px,1fr) 88px;
+  align-items:center;
+  gap:16px;
+  margin:2px 0 20px;
+}
+.transfer-node{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+  color:var(--muted);
+}
+.transfer-node-icon{
+  width:62px;
+  height:62px;
+  display:grid;
+  place-items:center;
+  border-radius:18px;
+  border:1px solid var(--line2);
+  background:var(--panel2);
+  color:var(--brand2);
+  font-size:22px;
+  box-shadow:0 12px 26px rgba(0,0,0,.18);
+  transition:.25s ease;
+}
+.transfer-node small{
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.03em;
+}
+.transfer-route{
+  position:relative;
+  height:74px;
+  display:flex;
+  align-items:center;
+}
+.transfer-line{
+  position:absolute;
+  left:0;
+  right:0;
+  top:50%;
+  height:2px;
+  transform:translateY(-50%);
+  background:linear-gradient(
+    90deg,
+    color-mix(in srgb,var(--brand) 20%,transparent),
+    color-mix(in srgb,var(--brand) 70%,var(--line2)),
+    color-mix(in srgb,var(--brand) 20%,transparent)
+  );
+  overflow:hidden;
+}
+.transfer-line:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+  transform:translateX(-100%);
+  animation:transferLineShine 1.7s linear infinite;
+}
+@keyframes transferLineShine{
+  to{transform:translateX(100%)}
+}
+.transfer-dots{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-evenly;
+  pointer-events:none;
+}
+.transfer-dots span{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--brand2);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--brand) 8%,transparent);
+  opacity:.28;
+  animation:transferDotPulse 1.25s ease-in-out infinite;
+}
+.transfer-dots span:nth-child(2){animation-delay:.16s}
+.transfer-dots span:nth-child(3){animation-delay:.32s}
+@keyframes transferDotPulse{
+  0%,100%{opacity:.22;transform:scale(.78)}
+  50%{opacity:1;transform:scale(1.22)}
+}
+.transfer-file{
+  position:absolute;
+  top:50%;
+  left:0;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:13px;
+  transform:translateY(-50%);
+  border:1px solid color-mix(in srgb,var(--brand) 42%,var(--line));
+  background:color-mix(in srgb,var(--brand) 14%,var(--panel2));
+  color:var(--brand2);
+  font-size:17px;
+  box-shadow:0 12px 28px color-mix(in srgb,var(--brand) 18%,transparent);
+  z-index:3;
+  animation:transferFileTravel 2.55s cubic-bezier(.45,.05,.25,1) infinite;
+}
+@keyframes transferFileTravel{
+  0%{
+    left:0;
+    opacity:0;
+    transform:translateY(-50%) scale(.82) rotate(-3deg);
+  }
+  8%{
+    opacity:1;
+  }
+  45%{
+    transform:translateY(-58%) scale(1.06) rotate(2deg);
+  }
+  82%{
+    opacity:1;
+  }
+  100%{
+    left:calc(100% - 42px);
+    opacity:0;
+    transform:translateY(-50%) scale(.88) rotate(0deg);
+  }
+}
+.upload-transfer-visual.uploading .transfer-pc .transfer-node-icon{
+  border-color:color-mix(in srgb,var(--brand) 45%,var(--line));
+}
+.upload-transfer-visual.creating .transfer-server .transfer-node-icon,
+.upload-transfer-visual.release .transfer-server .transfer-node-icon,
+.upload-transfer-visual.finishing .transfer-server .transfer-node-icon{
+  border-color:color-mix(in srgb,var(--brand) 50%,var(--line));
+  box-shadow:0 12px 30px color-mix(in srgb,var(--brand) 18%,transparent);
+}
+.upload-transfer-visual.success .transfer-file{
+  animation:none;
+  left:calc(100% - 42px);
+  opacity:1;
+  color:var(--good);
+  border-color:color-mix(in srgb,var(--good) 42%,var(--line));
+  background:color-mix(in srgb,var(--good) 9%,var(--panel2));
+}
+.upload-transfer-visual.success .transfer-server .transfer-node-icon{
+  color:var(--good);
+  border-color:color-mix(in srgb,var(--good) 42%,var(--line));
+  background:color-mix(in srgb,var(--good) 8%,var(--panel2));
+}
+.upload-transfer-visual.error .transfer-file{
+  animation:none;
+  left:42%;
+  color:var(--danger);
+  border-color:color-mix(in srgb,var(--danger) 38%,var(--line));
+  background:color-mix(in srgb,var(--danger) 8%,var(--panel2));
+}
+
+/* Published-only product state */
+.published-state{
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  border:1px solid color-mix(in srgb,var(--good) 30%,var(--line));
+  border-radius:11px;
+  background:color-mix(in srgb,var(--good) 6%,var(--panel2));
+}
+.published-state>i{
+  color:var(--good);
+}
+.published-state strong{
+  display:block;
+  font-size:10px;
+}
+.published-state small{
+  display:block;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:8px;
+}
+
+@media(max-width:620px){
+  .upload-transfer-visual{
+    grid-template-columns:70px minmax(100px,1fr) 70px;
+    gap:10px;
+  }
+  .transfer-node-icon{
+    width:52px;
+    height:52px;
+    border-radius:15px;
+    font-size:19px;
+  }
+  .transfer-file{
+    width:36px;
+    height:36px;
+    font-size:15px;
+  }
+  @keyframes transferFileTravel{
+    0%{left:0;opacity:0;transform:translateY(-50%) scale(.82)}
+    8%{opacity:1}
+    82%{opacity:1}
+    100%{left:calc(100% - 36px);opacity:0;transform:translateY(-50%) scale(.9)}
+  }
+}
