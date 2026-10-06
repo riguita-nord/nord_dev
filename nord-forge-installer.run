@@ -44,7 +44,7 @@ bootstrap(){
   [[ -f "$src/VERSION" && -f "$src/install.sh" && -f "$src/core/pom.xml" && -f "$src/admin-service/pom.xml" ]] || die "Downloaded source is not Nord Forge V2."
   version="$(tr -d '[:space:]' < "$src/VERSION")"
   log "Verified Nord Forge V${version}."
-  NORD_UPDATE_SOURCE_SHA="$sha" bash "$src/install.sh" "$action"
+  (cd "$src" && NORD_UPDATE_SOURCE_SHA="$sha" bash "./install.sh" "$action")
 }
 
 case "$MODE" in
