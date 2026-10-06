@@ -2,6 +2,9 @@
 set -Eeuo pipefail
 umask 027
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 ACTION="${1:-install}"
 ROOT="/opt/nord-forge"
 ETC="/etc/nord-forge"
@@ -9,7 +12,7 @@ DATA="/var/lib/nord-forge"
 BACKUPS="$DATA/backups"
 LEGACY_BACKUPS="/var/backups/nord-forge"
 ENV_FILE="$ETC/nord.env"
-VERSION="$(tr -d '[:space:]' < VERSION)"
+VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")"
 BACKUP_ARCHIVE=""
 DB_RESET_MARKER="$DATA/control/forge-v2-clean-db"
 DB_RESET_PERFORMED=0
