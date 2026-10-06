@@ -555,9 +555,7 @@ function renderProductWorkspace(d){
           '</aside>'+
           '<main class="nui-builder-preview-area">'+
             '<div class="nui-preview-stage desktop" id="nui-preview-stage">'+
-              '<div class="nui-preview-canvas" id="nui-preview-canvas">'+
-                '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts"></iframe>'+
-              '</div>'+
+              '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts"></iframe>'+
             '</div>'+
           '</main>'+
           '<aside class="nui-builder-code">'+
@@ -618,7 +616,6 @@ async function initNuiBuilder(p){
   const js=document.querySelector('#nui-js');
   const frame=document.querySelector('#nui-preview');
   const stage=document.querySelector('#nui-preview-stage');
-  const canvas=document.querySelector('#nui-preview-canvas');
   const save=document.querySelector('#nui-save');
   const stateLabel=document.querySelector('#nui-save-state');
   if(!html||!css||!js||!frame)return;
@@ -764,43 +761,14 @@ async function initNuiBuilder(p){
   let lastInterfaceBounds=null;
 
   const applyCanvasZoom=()=>{
-    if(!canvas||!stage)return;
-    const sizes={desktop:[1920,1080],tablet:[1024,1366],mobile:[390,844]};
-    const size=sizes[settings.viewport||'desktop']||sizes.desktop;
-    const stageW=Math.max(1,stage.clientWidth);
-    const stageH=Math.max(1,stage.clientHeight);
-    const margin=18;
-    const availableW=Math.max(1,stageW-(margin*2));
-    const availableH=Math.max(1,stageH-(margin*2));
-
-    canvas.style.width=size[0]+'px';
-    canvas.style.height=size[1]+'px';
-    canvas.style.position='absolute';
-    canvas.style.left='0';
-    canvas.style.top='0';
-    canvas.style.transformOrigin='0 0';
-
-    let scale=Math.min(availableW/size[0],availableH/size[1],1);
-    let centerX=size[0]/2;
-    let centerY=size[1]/2;
-
-    if(autoFitUi&&lastInterfaceBounds&&selectedInterface!=='all'){
-      const b=lastInterfaceBounds;
-      const fit=Math.min(
-        availableW/Math.max(1,b.width),
-        availableH/Math.max(1,b.height)
-      )*0.90;
-      scale=Math.max(scale,Math.min(fit,3.5));
-      centerX=(Number(b.left)||0)+(Math.max(1,Number(b.width)||1)/2);
-      centerY=(Number(b.top)||0)+(Math.max(1,Number(b.height)||1)/2);
-    }else if(!autoFitUi){
-      scale=Math.min(scale*Math.max(0.5,interfaceZoom),3.5);
-    }
-
-    const tx=(stageW/2)-(centerX*scale);
-    const ty=(stageH/2)-(centerY*scale);
-    canvas.style.transform='matrix('+scale+',0,0,'+scale+','+tx+','+ty+')';
-
+    if(!frame||!frame.contentWindow)return;
+    try{
+      frame.contentWindow.postMessage({
+        type:'nord-builder-fit',
+        enabled:autoFitUi,
+        zoom:Math.max(.5,Math.min(3.5,interfaceZoom))
+      },'*');
+    }catch(e){}
     const label=document.querySelector('#nui-zoom-label');
     if(label)label.textContent=autoFitUi?'Fit':Math.round(interfaceZoom*100)+'%';
   };
@@ -879,6 +847,65 @@ async function initNuiBuilder(p){
         setTimeout(keepSelectedVisible,750);
       }
 
+      const fitSelected=()=>{
+        const target=selectedRoot||document.body;
+        if(!target)return;
+
+        const requestFit=window.__nordFitState||{enabled:true,zoom:1};
+        // Always reset before measuring to avoid compounding transforms.
+        if(selectedRoot){
+          selectedRoot.style.removeProperty('transform');
+          selectedRoot.style.removeProperty('transform-origin');
+          selectedRoot.style.removeProperty('will-change');
+        }
+
+        requestAnimationFrame(()=>{
+          const r=target.getBoundingClientRect();
+          const vw=Math.max(1,window.innerWidth);
+          const vh=Math.max(1,window.innerHeight);
+          const pad=28;
+
+          let scale=1;
+          if(requestFit.enabled&&selectedRoot){
+            scale=Math.min(
+              (vw-(pad*2))/Math.max(1,r.width),
+              (vh-(pad*2))/Math.max(1,r.height)
+            )*.94;
+            scale=Math.max(.25,Math.min(scale,3.5));
+          }else if(selectedRoot){
+            scale=Math.max(.5,Math.min(Number(requestFit.zoom)||1,3.5));
+          }
+
+          if(selectedRoot){
+            const targetW=r.width*scale;
+            const targetH=r.height*scale;
+            const dx=((vw-targetW)/2)-r.left;
+            const dy=((vh-targetH)/2)-r.top;
+            selectedRoot.style.setProperty('transform-origin','0 0','important');
+            selectedRoot.style.setProperty('transform','translate('+dx+'px,'+dy+'px) scale('+scale+')','important');
+            selectedRoot.style.setProperty('will-change','transform','important');
+          }
+
+          parent.postMessage({
+            type:'nord-nui-preview-fit',
+            interfaceId:selected,
+            scale
+          },'*');
+        });
+      };
+
+      window.__nordFitState={enabled:true,zoom:1};
+      addEventListener('message',event=>{
+        const data=event.data||{};
+        if(data.type==='nord-builder-fit'){
+          window.__nordFitState={
+            enabled:data.enabled!==false,
+            zoom:Number(data.zoom)||1
+          };
+          fitSelected();
+        }
+      });
+
       const reportBounds=()=>{
         const target=selectedRoot||document.body;
         const r=target.getBoundingClientRect();
@@ -903,9 +930,10 @@ async function initNuiBuilder(p){
           viewportHeight:innerHeight
         },'*');
       };
-      setTimeout(reportBounds,80);
-      setTimeout(reportBounds,450);
-      addEventListener('resize',reportBounds);
+      setTimeout(()=>{reportBounds();fitSelected()},80);
+      setTimeout(()=>{reportBounds();fitSelected()},450);
+      setTimeout(()=>fitSelected(),900);
+      addEventListener('resize',()=>{reportBounds();fitSelected()});
     })();
   `;
 
@@ -1039,15 +1067,20 @@ async function initNuiBuilder(p){
 
   const previewMessage=e=>{
     const data=e.data||{};
-    if(data.type!=='nord-nui-preview-bounds')return;
     if(data.interfaceId!==selectedInterface)return;
-    lastInterfaceBounds={
-      left:Number(data.left)||0,
-      top:Number(data.top)||0,
-      width:Math.max(1,Number(data.width)||1),
-      height:Math.max(1,Number(data.height)||1)
-    };
-    if(autoFitUi)applyCanvasZoom();
+    if(data.type==='nord-nui-preview-bounds'){
+      lastInterfaceBounds={
+        left:Number(data.left)||0,
+        top:Number(data.top)||0,
+        width:Math.max(1,Number(data.width)||1),
+        height:Math.max(1,Number(data.height)||1)
+      };
+      return;
+    }
+    if(data.type==='nord-nui-preview-fit'){
+      const label=document.querySelector('#nui-zoom-label');
+      if(label)label.textContent=autoFitUi?Math.round((Number(data.scale)||1)*100)+'%':Math.round(interfaceZoom*100)+'%';
+    }
   };
   window.addEventListener('message',previewMessage);
 
