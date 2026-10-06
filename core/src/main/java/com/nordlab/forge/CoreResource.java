@@ -64,10 +64,55 @@ public class CoreResource {
     public Response createWorkspace(@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf); long id=uid(session); b=body(b); String name=forge.text(b,"name");
         if(name.length()<2) throw new BadRequestException("workspace_name_required");
-        String slug=forge.uniqueWorkspaceSlug(name);
-        long wid=db.insert("INSERT INTO workspaces(owner_id,name,slug,store_name) VALUES(?,?,?,?)",id,name,slug,name);
+        String requestedSlug=forge.text(b,"slug");
+        String slug=requestedSlug.isBlank()?forge.uniqueWorkspaceSlug(name):forge.slug(requestedSlug);
+        if(slug.length()<2) slug=forge.uniqueWorkspaceSlug(name);
+        if(db.count("SELECT COUNT(*) FROM workspaces WHERE slug=?",slug)>0) slug=forge.uniqueWorkspaceSlug(name);
+        String storeName=forge.text(b,"store_name"); if(storeName.isBlank()) storeName=name;
+        String currency=forge.text(b,"currency"); if(currency.isBlank()) currency="EUR";
+        String theme=forge.text(b,"theme"); if(!"light".equals(theme)&&!"dark".equals(theme)) theme="dark";
+        long wid=db.insert("INSERT INTO workspaces(owner_id,name,slug,store_name,store_description,store_currency,store_theme) VALUES(?,?,?,?,?,?,?)",
+            id,name,slug,storeName,forge.text(b,"store_description"),currency,theme);
         forge.audit(wid,id,"workspace.created",String.valueOf(wid),null);
         return ok(forge.workspace(wid));
+    }
+
+    @DELETE @Path("/workspaces/{wid}")
+    public Response deleteWorkspace(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
+        unsafe(session,csrf); long actor=uid(session); b=body(b);
+        Map<String,Object> w=db.one("SELECT * FROM workspaces WHERE id=?",wid);
+        if(w==null) throw new NotFoundException("workspace_not_found");
+        if(((Number)w.get("owner_id")).longValue()!=actor) throw new ForbiddenException("workspace_owner_required");
+        String confirmation=forge.text(b,"confirmation");
+        if(!String.valueOf(w.get("name")).equals(confirmation)) throw new BadRequestException("workspace_confirmation_mismatch");
+
+        db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM protection_installations WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM protection_revocations WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM protection_builds WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM product_protection WHERE product_id IN(SELECT id FROM products WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM license_logs WHERE product_id IN(SELECT id FROM products WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM license_activations WHERE license_id IN(SELECT l.id FROM licenses l JOIN products p ON p.id=l.product_id WHERE p.workspace_id=?)",wid);
+        db.execute("DELETE FROM download_tokens WHERE release_id IN(SELECT r.id FROM releases r JOIN products p ON p.id=r.product_id WHERE p.workspace_id=?)",wid);
+        db.execute("DELETE FROM licenses WHERE product_id IN(SELECT id FROM products WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM entitlements WHERE product_id IN(SELECT id FROM products WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM purchase_messages WHERE thread_id IN(SELECT id FROM purchase_threads WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM purchase_threads WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM support_messages WHERE ticket_id IN(SELECT id FROM support_tickets WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM support_tickets WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM releases WHERE product_id IN(SELECT id FROM products WHERE workspace_id=?)",wid);
+        db.execute("DELETE FROM docs WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM site_pages WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM integrations WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM infra_nodes WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM api_keys WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM bot_events WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM audit_events WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM workspace_members WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM products WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM workspaces WHERE id=?",wid);
+        return ok(Map.of("ok",true));
     }
     @POST @Path("/workspaces/{wid}/archive")
     public Response archive(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
