@@ -1032,3 +1032,27 @@
   .product-data-row{align-items:flex-start;flex-direction:column}
   .product-data-actions{justify-content:flex-start}
 }
+
+/* Developer navigation groups */
+.side-nav{
+  gap:2px;
+}
+.nav-group-label{
+  margin:12px 10px 5px;
+  color:var(--muted);
+  font-size:8px;
+  font-weight:950;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+}
+.nav-group-label:first-child{margin-top:0}
+.side-nav .nav-btn:nth-child(3),
+.side-nav .nav-btn:nth-child(7),
+.side-nav .nav-btn:nth-child(10){
+  margin-top:0;
+}
+.side-nav .nav-btn:nth-child(3):before,
+.side-nav .nav-btn:nth-child(7):before,
+.side-nav .nav-btn:nth-child(10):before{
+  display:none;
+}
