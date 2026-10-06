@@ -767,19 +767,46 @@ async function initNuiBuilder(p){
       const roots=[...document.querySelectorAll('[data-nord-interface]')];
       const selectedRoot=selected==='all'?null:roots.find(el=>el.getAttribute('data-nord-interface')===selected);
 
-      // Only root visibility is overridden. Nested modals preserve the resource's CSS/JS state.
-      roots.forEach(el=>{
-        if(!selectedRoot||el===selectedRoot){
-          if(el===selectedRoot){
-            el.style.setProperty('display','block','important');
-            el.style.setProperty('visibility','visible','important');
-            el.style.setProperty('opacity','1','important');
-            el.hidden=false;
-          }
-        }else{
-          el.style.setProperty('display','none','important');
+      const forceVisible=el=>{
+        if(!el||el===document.body||el===document.documentElement)return;
+        el.style.setProperty('display','block','important');
+        el.style.setProperty('visibility','visible','important');
+        el.style.setProperty('opacity','1','important');
+        el.hidden=false;
+        el.classList.remove('hidden','hide','d-none');
+      };
+
+      if(selectedRoot){
+        // The selected interface may live inside #app/.ui.hidden.
+        // Reveal only its ancestor chain; do not globally unhide nested modals.
+        const chain=new Set();
+        let cursor=selectedRoot;
+        while(cursor&&cursor!==document.body){
+          chain.add(cursor);
+          cursor=cursor.parentElement;
         }
-      });
+
+        roots.forEach(el=>{
+          if(chain.has(el)||el===selectedRoot){
+            forceVisible(el);
+          }else if(![...chain].some(parent=>el.contains(parent))){
+            // Hide independent roots/siblings, but never hide an ancestor needed by the selected UI.
+            el.style.setProperty('display','none','important');
+          }
+        });
+
+        [...chain].reverse().forEach(forceVisible);
+
+        // Hide sibling interface roots under the same wrappers.
+        [...chain].forEach(parent=>{
+          [...parent.children].forEach(child=>{
+            if(chain.has(child)||child.contains(selectedRoot))return;
+            if(child.hasAttribute&&child.hasAttribute('data-nord-interface')){
+              child.style.setProperty('display','none','important');
+            }
+          });
+        });
+      }
 
       const reportBounds=()=>{
         const target=selectedRoot||document.body;
@@ -810,12 +837,8 @@ async function initNuiBuilder(p){
     const detected=detectInterfaces(html.value);
     refreshInterfacePicker(detected.items);
     const selected=selectedInterface;
-    const isolation=selected==='all'?'':[
-      '[data-nord-interface]{display:none!important;}',
-      '[data-nord-interface="'+selected+'"]{display:block!important;visibility:visible!important;opacity:1!important;}'
-    ].join('');
     const runtime=previewRuntime(selected);
-    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+isolation+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
     frame.srcdoc=documentHtml;
     requestAnimationFrame(applyCanvasZoom);
   };
