@@ -92,6 +92,44 @@ public class CoreResource {
         return ok(forge.workspace(wid));
     }
 
+    @GET @Path("/workspaces/{wid}/settings")
+    public Response workspaceSettings(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session){
+        long actor=uid(session);
+        forge.requireWorkspace(actor,wid);
+        Map<String,Object> w=db.one("SELECT id,owner_id,name,slug,store_name,store_description,store_currency,store_theme,status,created_at FROM workspaces WHERE id=?",wid);
+        if(w==null) throw new NotFoundException("workspace_not_found");
+        Map<String,Object> out=new LinkedHashMap<>(w);
+        out.put("role",forge.role(actor,wid));
+        out.put("can_manage",((Number)w.get("owner_id")).longValue()==actor || "admin".equals(forge.role(actor,wid)));
+        out.put("is_owner",((Number)w.get("owner_id")).longValue()==actor);
+        return ok(out);
+    }
+
+    @PUT @Path("/workspaces/{wid}/settings")
+    public Response updateWorkspaceSettings(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
+        unsafe(session,csrf);
+        long actor=uid(session);
+        Map<String,Object> current=db.one("SELECT * FROM workspaces WHERE id=?",wid);
+        if(current==null) throw new NotFoundException("workspace_not_found");
+        String role=forge.role(actor,wid);
+        boolean owner=((Number)current.get("owner_id")).longValue()==actor;
+        if(!owner && !"admin".equals(role)) throw new ForbiddenException("workspace_admin_required");
+        b=body(b);
+
+        String name=forge.text(b,"name"); if(name.length()<2) throw new BadRequestException("workspace_name_required");
+        String slug=forge.slug(forge.text(b,"slug")); if(slug.length()<2) throw new BadRequestException("workspace_slug_required");
+        if(db.count("SELECT COUNT(*) FROM workspaces WHERE slug=? AND id<>?",slug,wid)>0) throw new BadRequestException("workspace_slug_taken");
+
+        String storeName=forge.text(b,"store_name"); if(storeName.isBlank()) storeName=name;
+        String currency=forge.text(b,"store_currency"); if(currency.isBlank()) currency="EUR";
+        String theme=forge.text(b,"store_theme"); if(!Set.of("dark","light").contains(theme)) theme="dark";
+
+        db.execute("UPDATE workspaces SET name=?,slug=?,store_name=?,store_description=?,store_currency=?,store_theme=? WHERE id=?",
+            name,slug,storeName,forge.text(b,"store_description"),currency,theme,wid);
+        forge.audit(wid,actor,"workspace.settings_updated",String.valueOf(wid),slug);
+        return ok(db.one("SELECT id,owner_id,name,slug,store_name,store_description,store_currency,store_theme,status,created_at FROM workspaces WHERE id=?",wid));
+    }
+
     @POST @Path("/workspaces/{wid}/archive")
     public Response archive(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
         unsafe(session,csrf); long id=uid(session); forge.requireWorkspace(id,wid,"admin"); db.execute("UPDATE workspaces SET status='archived' WHERE id=?",wid); forge.audit(wid,id,"workspace.archived",String.valueOf(wid),null); return ok(Map.of("ok",true));
