@@ -4,6 +4,9 @@ Nord Forge V2 is the Java rewrite of the Nord development platform. It replaces 
 
 ## Product surfaces
 
+Forge V2 uses three hard product boundaries. **Client Area** is for customers, **Developer Studio** starts at a dedicated Workspace Hub, and **Administration** is a separate service launched only by the Platform Owner.
+
+
 - **Client Area** — account, Forge Key, purchased products, licenses, marketplace, downloads and support.
 - **Developer Studio** — isolated workspace surface for products, releases, licensing, docs, public pages, team, purchases, infrastructure, integrations and audit.
 - **Administration** — independent Java service. Platform Owner launches it from Forge through a signed short-lived SSO handoff.
