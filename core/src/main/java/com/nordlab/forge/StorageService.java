@@ -182,24 +182,40 @@ public class StorageService {
             StringBuilder css=new StringBuilder();
             StringBuilder js=new StringBuilder();
 
-            Pattern cssPattern=Pattern.compile("(?is)<link\\b[^>]*rel=[\\\"']?stylesheet[\\\"']?[^>]*href=[\\\"']([^\\\"']+)[\\\"'][^>]*>");
-            Matcher cssMatcher=cssPattern.matcher(html);
+            // Preserve inline styles from <head> or <body>.
+            Pattern inlineStylePattern=Pattern.compile("(?is)<style\\b[^>]*>(.*?)</style>");
+            Matcher inlineStyleMatcher=inlineStylePattern.matcher(html);
             StringBuffer cleanedHtml=new StringBuffer();
-            while(cssMatcher.find()){
-                String ref=cssMatcher.group(1).trim();
-                if(isLocalAsset(ref)){
+            while(inlineStyleMatcher.find()){
+                css.append("/* inline style */\\n").append(inlineStyleMatcher.group(1)).append("\\n\\n");
+                inlineStyleMatcher.appendReplacement(cleanedHtml,"");
+            }
+            inlineStyleMatcher.appendTail(cleanedHtml);
+            html=cleanedHtml.toString();
+
+            // Read stylesheet links regardless of attribute order.
+            Pattern linkTagPattern=Pattern.compile("(?is)<link\\b[^>]*>");
+            Matcher linkMatcher=linkTagPattern.matcher(html);
+            cleanedHtml=new StringBuffer();
+            while(linkMatcher.find()){
+                String tag=linkMatcher.group();
+                String rel=htmlAttribute(tag,"rel");
+                String ref=htmlAttribute(tag,"href");
+                if(ref!=null && rel!=null && rel.toLowerCase(Locale.ROOT).contains("stylesheet") && isLocalAsset(ref)){
                     String resolved=resolveZipReference(htmlBase,ref);
                     ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
                     if(asset!=null){
+                        String assetCss=readZipText(zip,asset,12*1024*1024);
+                        assetCss=rewriteCssAssets(zip,entries,parentZipPath(resolved),assetCss);
                         css.append("/* ").append(resolved).append(" */\\n")
-                           .append(readZipText(zip,asset,8*1024*1024)).append("\\n\\n");
-                        cssMatcher.appendReplacement(cleanedHtml,"");
+                           .append(assetCss).append("\\n\\n");
+                        linkMatcher.appendReplacement(cleanedHtml,"");
                         continue;
                     }
                 }
-                cssMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(cssMatcher.group()));
+                linkMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(tag));
             }
-            cssMatcher.appendTail(cleanedHtml);
+            linkMatcher.appendTail(cleanedHtml);
             html=cleanedHtml.toString();
 
             Pattern scriptPattern=Pattern.compile("(?is)<script\\b([^>]*)src=[\\\"']([^\\\"']+)[\\\"']([^>]*)>\\s*</script>");
@@ -212,7 +228,7 @@ public class StorageService {
                     ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
                     if(asset!=null){
                         js.append("/* ").append(resolved).append(" */\\n")
-                          .append(readZipText(zip,asset,12*1024*1024)).append("\\n\\n");
+                          .append(readZipText(zip,asset,16*1024*1024)).append("\\n\\n");
                         scriptMatcher.appendReplacement(cleanedHtml,"");
                         continue;
                     }
@@ -222,6 +238,12 @@ public class StorageService {
             scriptMatcher.appendTail(cleanedHtml);
             html=cleanedHtml.toString();
 
+            // Rewrite local HTML media assets to data URLs so srcdoc can render them.
+            html=rewriteHtmlAssets(zip,entries,htmlBase,html);
+
+            // Builder stores only the actual page body, not nested html/head wrappers.
+            Matcher bodyMatcher=Pattern.compile("(?is)<body\\b[^>]*>(.*?)</body>").matcher(html);
+            if(bodyMatcher.find()) html=bodyMatcher.group(1);
             Map<String,Object> out=new LinkedHashMap<>();
             out.put("html",html);
             out.put("css",css.toString());
@@ -234,6 +256,96 @@ public class StorageService {
         }catch(IOException e){
             throw new IllegalStateException("nui_release_import_failed",e);
         }
+    }
+
+    private String htmlAttribute(String tag,String name){
+        Matcher m=Pattern.compile("(?is)\\b"+Pattern.quote(name)+"\\s*=\\s*([\\\"'])(.*?)\\1").matcher(tag);
+        if(m.find()) return m.group(2).trim();
+        m=Pattern.compile("(?is)\\b"+Pattern.quote(name)+"\\s*=\\s*([^\\s>]+)").matcher(tag);
+        return m.find()?m.group(1).trim():null;
+    }
+
+    private String rewriteCssAssets(ZipFile zip,Map<String,ZipEntry> entries,String cssBase,String source)throws IOException{
+        Pattern p=Pattern.compile("(?is)url\\(\\s*([\\\"']?)([^\\)\\\"']+)\\1\\s*\\)");
+        Matcher m=p.matcher(source);
+        StringBuffer out=new StringBuffer();
+        while(m.find()){
+            String ref=m.group(2).trim();
+            if(isLocalAsset(ref)&&!ref.startsWith("#")){
+                String cleanRef=ref;
+                int q=cleanRef.indexOf('?'); if(q>=0) cleanRef=cleanRef.substring(0,q);
+                int hash=cleanRef.indexOf('#'); if(hash>=0) cleanRef=cleanRef.substring(0,hash);
+                String resolved=resolveZipReference(cssBase,cleanRef);
+                ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
+                if(asset!=null && asset.getSize()>=0 && asset.getSize()<=8L*1024L*1024L){
+                    byte[] bytes=readZipBytes(zip,asset,8*1024*1024);
+                    String data="data:"+mimeFor(resolved)+";base64,"+Base64.getEncoder().encodeToString(bytes);
+                    m.appendReplacement(out,Matcher.quoteReplacement("url(\""+data+"\")"));
+                    continue;
+                }
+            }
+            m.appendReplacement(out,Matcher.quoteReplacement(m.group()));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    private String rewriteHtmlAssets(ZipFile zip,Map<String,ZipEntry> entries,String htmlBase,String source)throws IOException{
+        Pattern tagPattern=Pattern.compile("(?is)<(img|source|video|audio)\\b[^>]*>");
+        Matcher tagMatcher=tagPattern.matcher(source);
+        StringBuffer out=new StringBuffer();
+        while(tagMatcher.find()){
+            String tag=tagMatcher.group();
+            String rewritten=tag;
+            for(String attr:List.of("src","poster")){
+                String ref=htmlAttribute(rewritten,attr);
+                if(ref!=null&&isLocalAsset(ref)){
+                    String cleanRef=ref;
+                    int q=cleanRef.indexOf('?'); if(q>=0) cleanRef=cleanRef.substring(0,q);
+                    String resolved=resolveZipReference(htmlBase,cleanRef);
+                    ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
+                    if(asset!=null&&asset.getSize()>=0&&asset.getSize()<=8L*1024L*1024L){
+                        String data="data:"+mimeFor(resolved)+";base64,"+Base64.getEncoder().encodeToString(readZipBytes(zip,asset,8*1024*1024));
+                        rewritten=rewritten.replace(ref,data);
+                    }
+                }
+            }
+            tagMatcher.appendReplacement(out,Matcher.quoteReplacement(rewritten));
+        }
+        tagMatcher.appendTail(out);
+        return out.toString();
+    }
+
+    private byte[] readZipBytes(ZipFile zip,ZipEntry entry,int maxBytes)throws IOException{
+        if(entry.getSize()>maxBytes) throw new IOException("zip_entry_too_large");
+        try(InputStream in=zip.getInputStream(entry); ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] buf=new byte[64*1024];
+            int total=0,read;
+            while((read=in.read(buf))!=-1){
+                total+=read;
+                if(total>maxBytes) throw new IOException("zip_entry_too_large");
+                out.write(buf,0,read);
+            }
+            return out.toByteArray();
+        }
+    }
+
+    private String mimeFor(String path){
+        String low=path.toLowerCase(Locale.ROOT);
+        if(low.endsWith(".png"))return "image/png";
+        if(low.endsWith(".jpg")||low.endsWith(".jpeg"))return "image/jpeg";
+        if(low.endsWith(".webp"))return "image/webp";
+        if(low.endsWith(".gif"))return "image/gif";
+        if(low.endsWith(".svg"))return "image/svg+xml";
+        if(low.endsWith(".woff2"))return "font/woff2";
+        if(low.endsWith(".woff"))return "font/woff";
+        if(low.endsWith(".ttf"))return "font/ttf";
+        if(low.endsWith(".otf"))return "font/otf";
+        if(low.endsWith(".mp4"))return "video/mp4";
+        if(low.endsWith(".webm"))return "video/webm";
+        if(low.endsWith(".mp3"))return "audio/mpeg";
+        if(low.endsWith(".ogg"))return "audio/ogg";
+        return "application/octet-stream";
     }
 
     private String readZipText(ZipFile zip,ZipEntry entry,int maxBytes)throws IOException{
