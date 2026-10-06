@@ -534,13 +534,28 @@ async function saveProductSettings(e,p){
   }catch(err){toast(err.message)}
 }
 function deleteCurrentProduct(p){
-  modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><div><div class="side-kicker">Danger zone</div><h2>Delete '+h(p.name)+'</h2></div><button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body"><div class="notice">This permanently deletes the product, releases, licenses and protection data.</div><div class="field"><label>Type <b>'+h(p.name)+'</b> to confirm</label><input id="delete-product-confirm" autocomplete="off"></div></div><div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="delete-product-confirm-btn" disabled><i class="fa-solid fa-trash"></i> Delete permanently</button></div></div></div>';
+  modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><div><div class="side-kicker">Danger zone</div><h2>Delete '+h(p.name)+'</h2></div><button class="icon-btn" type="button" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body"><div class="notice">This permanently deletes the product, releases, licenses and protection data.</div><div class="field"><label>Type <b>'+h(p.name)+'</b> to confirm</label><input id="delete-product-confirm" autocomplete="off" spellcheck="false"><small id="delete-product-hint">Enter the exact product name to continue.</small></div></div><div class="modal-foot"><button class="btn" type="button" data-close>Cancel</button><button class="btn danger" type="button" id="delete-product-confirm-btn"><i class="fa-solid fa-trash"></i> Delete permanently</button></div></div></div>';
   modalRoot.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>modalRoot.innerHTML='');
-  const input=document.querySelector('#delete-product-confirm'),btn=document.querySelector('#delete-product-confirm-btn');
+  const input=modalRoot.querySelector('#delete-product-confirm');
+  const btn=modalRoot.querySelector('#delete-product-confirm-btn');
+  const hint=modalRoot.querySelector('#delete-product-hint');
   const matches=()=>input.value.trim()===String(p.name).trim();
-  input.oninput=()=>btn.disabled=!matches();
-  input.onkeydown=e=>{if(e.key==='Enter'&&matches()){e.preventDefault();btn.click()}};
-  btn.onclick=async()=>{
+
+  input.oninput=()=>{
+    const ok=matches();
+    btn.classList.toggle('confirmed',ok);
+    if(hint){
+      hint.textContent=ok?'Product name confirmed. You can delete it now.':'Enter the exact product name to continue.';
+      hint.classList.toggle('ok',ok);
+    }
+  };
+
+  const remove=async()=>{
+    if(!matches()){
+      toast('Type the exact product name first.');
+      input.focus();
+      return;
+    }
     try{
       btn.disabled=true;
       btn.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Deleting...';
@@ -552,10 +567,14 @@ function deleteCurrentProduct(p){
       await loadView();
     }catch(e){
       toast(e.message);
-      btn.disabled=!matches();
+      btn.disabled=false;
       btn.innerHTML='<i class="fa-solid fa-trash"></i> Delete permanently';
     }
   };
+
+  btn.onclick=remove;
+  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();remove()}};
+  setTimeout(()=>input.focus(),0);
 }
 function createWorkspace(){
   const draft={step:1,name:'',slug:'',store_name:'',currency:'EUR',theme:state.theme==='light'?'light':'dark'};
