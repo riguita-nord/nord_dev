@@ -7,6 +7,7 @@ ROOT="/opt/nord-forge"
 ETC="/etc/nord-forge"
 DATA="/var/lib/nord-forge"
 BACKUPS="$DATA/backups"
+LEGACY_BACKUPS="/var/backups/nord-forge"
 ENV_FILE="$ETC/nord.env"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BACKUP_ARCHIVE=""
@@ -36,8 +37,9 @@ install_deps(){
 
 ensure_user(){
   id nordforge >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin nordforge
-  mkdir -p "$ROOT" "$ETC" "$DATA/db" "$DATA/storage/releases" "$DATA/storage/protection-modules" "$DATA/control" "$BACKUPS"
+  mkdir -p "$ROOT" "$ETC" "$DATA/db" "$DATA/storage/releases" "$DATA/storage/protection-modules" "$DATA/control" "$BACKUPS" "$LEGACY_BACKUPS"
   chown -R nordforge:nordforge "$DATA"
+  chmod 0750 "$LEGACY_BACKUPS"
 }
 
 secret(){
@@ -136,6 +138,57 @@ commit_database_generation(){
     chown root:nordforge "$DB_RESET_MARKER"
     chmod 0640 "$DB_RESET_MARKER"
   fi
+}
+
+legacy_full_backup(){
+  local stamp archive entries=()
+  mkdir -p "$LEGACY_BACKUPS"
+  chmod 0750 "$LEGACY_BACKUPS"
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  archive="$LEGACY_BACKUPS/legacy-nord-dev-before-forge-v2-${stamp}.tar.gz"
+
+  for p in \
+    opt/nord-dev opt/nord_dev opt/nord-forge \
+    etc/nord-dev etc/nord_dev etc/nord-forge \
+    var/lib/nord-dev var/lib/nord_dev var/lib/nord-forge; do
+    [[ -e "/$p" ]] && entries+=("$p")
+  done
+
+  if [[ ${#entries[@]} -gt 0 ]]; then
+    tar -C / -czf "$archive" "${entries[@]}"
+    chmod 0600 "$archive"
+    log "Full legacy snapshot: $archive"
+  else
+    log "No legacy application directories were found to back up."
+  fi
+}
+
+remove_legacy_installation(){
+  warn "Removing the complete legacy Nord Dev/Forge installation and all legacy application data."
+
+  systemctl stop nord-dev.service nord_dev.service nord-forge.service nord-forge-admin.service 2>/dev/null || true
+  systemctl disable nord-dev.service nord_dev.service 2>/dev/null || true
+
+  rm -rf \
+    /opt/nord-dev /opt/nord_dev /opt/nord-forge \
+    /etc/nord-dev /etc/nord_dev /etc/nord-forge \
+    /var/lib/nord-dev /var/lib/nord_dev /var/lib/nord-forge
+
+  rm -f \
+    /etc/systemd/system/nord-dev.service \
+    /etc/systemd/system/nord_dev.service \
+    /etc/systemd/system/nord-forge.service \
+    /etc/systemd/system/nord-forge-admin.service \
+    /etc/systemd/system/nord-forge-update.service \
+    /etc/systemd/system/nord-forge-update.path \
+    /usr/local/bin/nord-dev \
+    /usr/local/bin/nord_dev \
+    /usr/local/bin/nord-forge \
+    /usr/local/libexec/nord-forge-update-worker
+
+  systemctl daemon-reload
+  ensure_user
+  ensure_env
 }
 
 install_files(){
@@ -247,6 +300,23 @@ case "$ACTION" in
     fi
     ;;
 
+  replace)
+    install_deps
+    build
+    legacy_full_backup
+    remove_legacy_installation
+    install_files
+    start_services
+    if ! health_check; then
+      show_failure_logs
+      die "Clean Forge V2 replacement failed health verification. Legacy backup remains under $LEGACY_BACKUPS."
+    fi
+    DB_RESET_PERFORMED=1
+    commit_database_generation
+    log "Legacy Nord Dev installation was fully removed and Nord Forge V$VERSION was installed from scratch."
+    log "Open the web UI and complete Initial Setup to create the Platform Owner."
+    ;;
+
   uninstall)
     stop_services
     systemctl disable nord-forge.service nord-forge-admin.service >/dev/null 2>&1 || true
@@ -263,6 +333,6 @@ case "$ACTION" in
     ;;
 
   *)
-    die "Usage: install.sh [install|update|uninstall]"
+    die "Usage: install.sh [install|update|replace|uninstall]"
     ;;
 esac
