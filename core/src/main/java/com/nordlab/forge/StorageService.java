@@ -611,7 +611,7 @@ public class StorageService {
             const nativeFetch = window.fetch ? window.fetch.bind(window) : null;
             window.fetch = (input, init) => {
               const url = String(input && input.url ? input.url : input || '');
-              if (/^https:\/\/[^/]+\//i.test(url) || url.startsWith('nui://') || url.startsWith('https://cfx-nui-')) {
+              if (/^https:[/][/][^/]+[/]/i.test(url) || url.startsWith('nui://') || url.startsWith('https://cfx-nui-')) {
                 return Promise.resolve(new Response('{}', {status:200, headers:{'Content-Type':'application/json'}}));
               }
               return nativeFetch ? nativeFetch(input, init) : Promise.resolve(new Response('{}',{status:200}));
