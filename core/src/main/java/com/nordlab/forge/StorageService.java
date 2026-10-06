@@ -154,22 +154,16 @@ public class StorageService {
             }
 
             if(htmlPath==null||!entries.containsKey(htmlPath.toLowerCase(Locale.ROOT))){
-                htmlPath=entries.values().stream()
+                List<String> htmlCandidates=entries.values().stream()
                     .map(e->normalizeZipName(e.getName()))
-                    .filter(n->{
-                        String low=n.toLowerCase(Locale.ROOT);
-                        return low.endsWith("/index.html")||low.equals("index.html");
-                    })
-                    .filter(n->{
-                        String low=n.toLowerCase(Locale.ROOT);
-                        return low.contains("/html/")||low.startsWith("html/")||
-                               low.contains("/web/")||low.startsWith("web/")||
-                               low.contains("/ui/")||low.startsWith("ui/")||
-                               low.contains("/nui/")||low.startsWith("nui/")||
-                               low.contains("/dist/")||low.startsWith("dist/")||
-                               !low.contains("/");
-                    })
-                    .min(Comparator.comparingInt(String::length))
+                    .filter(n->n.toLowerCase(Locale.ROOT).endsWith(".html"))
+                    .toList();
+
+                htmlPath=htmlCandidates.stream()
+                    .sorted(Comparator
+                        .comparingInt((String n)->nuiHtmlPriority(n))
+                        .thenComparingInt(String::length))
+                    .findFirst()
                     .orElse(null);
             }
 
@@ -218,22 +212,23 @@ public class StorageService {
             linkMatcher.appendTail(cleanedHtml);
             html=cleanedHtml.toString();
 
-            Pattern scriptPattern=Pattern.compile("(?is)<script\\b([^>]*)src=[\\\"']([^\\\"']+)[\\\"']([^>]*)>\\s*</script>");
-            Matcher scriptMatcher=scriptPattern.matcher(html);
+            Pattern scriptTagPattern=Pattern.compile("(?is)<script\\b[^>]*>\\s*</script>");
+            Matcher scriptMatcher=scriptTagPattern.matcher(html);
             cleanedHtml=new StringBuffer();
             while(scriptMatcher.find()){
-                String ref=scriptMatcher.group(2).trim();
-                if(isLocalAsset(ref)){
+                String tag=scriptMatcher.group();
+                String ref=htmlAttribute(tag,"src");
+                if(ref!=null&&isLocalAsset(ref)){
                     String resolved=resolveZipReference(htmlBase,ref);
                     ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
                     if(asset!=null){
                         js.append("/* ").append(resolved).append(" */\\n")
-                          .append(readZipText(zip,asset,16*1024*1024)).append("\\n\\n");
+                          .append(readZipText(zip,asset,20*1024*1024)).append("\\n\\n");
                         scriptMatcher.appendReplacement(cleanedHtml,"");
                         continue;
                     }
                 }
-                scriptMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(scriptMatcher.group()));
+                scriptMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(tag));
             }
             scriptMatcher.appendTail(cleanedHtml);
             html=cleanedHtml.toString();
@@ -479,6 +474,21 @@ public class StorageService {
             if(!peek(ch))throw new IllegalArgumentException("lua_table_parse");
             i++;
         }
+    }
+
+    private int nuiHtmlPriority(String name){
+        String low=normalizeZipName(name).toLowerCase(Locale.ROOT);
+        int score=1000;
+        if(low.endsWith("/index.html")||low.equals("index.html")) score-=500;
+        if(low.contains("/web/")||low.startsWith("web/")) score-=180;
+        if(low.contains("/html/")||low.startsWith("html/")) score-=170;
+        if(low.contains("/ui/")||low.startsWith("ui/")) score-=160;
+        if(low.contains("/nui/")||low.startsWith("nui/")) score-=150;
+        if(low.contains("/dist/")||low.startsWith("dist/")) score-=140;
+        if(low.contains("/build/")||low.startsWith("build/")) score-=130;
+        if(low.contains("/public/")||low.startsWith("public/")) score-=90;
+        if(low.contains("test")||low.contains("demo")||low.contains("storybook")) score+=250;
+        return score;
     }
 
     private String htmlAttribute(String tag,String name){
