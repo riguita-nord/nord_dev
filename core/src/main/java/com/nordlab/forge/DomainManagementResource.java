@@ -235,6 +235,7 @@ public class DomainManagementResource {
         forge.requireWorkspace(actor,wid,"developer","admin");
 
         List<Map<String,Object>> releases=db.query("SELECT id,storage_path FROM releases WHERE product_id=?",pid);
+        List<Map<String,Object>> modules=db.query("SELECT pm.storage_path FROM protection_modules pm JOIN protection_builds pb ON pb.build_id=pm.build_id WHERE pb.product_id=?",pid);
         try{
             db.execute("DELETE FROM download_tokens WHERE release_id IN(SELECT id FROM releases WHERE product_id=?)",pid);
 
@@ -261,9 +262,14 @@ public class DomainManagementResource {
                 Object storagePath=r.get("storage_path");
                 if(storagePath!=null) storage.delete(String.valueOf(storagePath));
             }
+            for(Map<String,Object> m:modules){
+                Object storagePath=m.get("storage_path");
+                if(storagePath!=null) storage.delete(String.valueOf(storagePath));
+            }
+            storage.deleteProductStorage(wid,pid);
 
             forge.audit(wid,actor,"product.deleted",String.valueOf(pid),String.valueOf(p.get("name")));
-            return Response.ok(Map.of("ok",true,"deleted_product_id",pid)).build();
+            return Response.ok(Map.of("ok",true,"deleted_product_id",pid,"purged_storage",true)).build();
         }catch(WebApplicationException e){
             throw e;
         }catch(Exception e){
