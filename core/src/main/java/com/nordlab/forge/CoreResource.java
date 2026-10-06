@@ -324,9 +324,14 @@ public class CoreResource {
           """,pid);
 
         Map<String,Object> releasePreview=Map.of();
+        Map<String,Object> releaseImportStatus=Map.of();
         if(latest!=null){
             Map<String,Object> imported=storage.importNuiFromRelease(String.valueOf(latest.get("storage_path")));
-            if(!imported.isEmpty()) releasePreview=imported;
+            if(imported.containsKey("html")){
+                releasePreview=imported;
+            }else if(imported.containsKey("import_error")){
+                releaseImportStatus=imported;
+            }
         }
 
         Map<String,Object> project=db.one("SELECT product_id,source_release_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
@@ -368,6 +373,7 @@ public class CoreResource {
         fallback.put("updated_at",null);
         fallback.put("source","template");
         fallback.put("detected",false);
+        fallback.putAll(releaseImportStatus);
         return ok(fallback);
     }
 
@@ -388,7 +394,20 @@ public class CoreResource {
           """,pid);
         if(latest==null) throw new NotFoundException("release_not_found");
 
-        StorageService.NuiAsset asset=storage.readNuiAsset(String.valueOf(latest.get("storage_path")),entry);
+        StorageService.NuiAsset asset;
+        try{
+            asset=storage.readNuiAsset(String.valueOf(latest.get("storage_path")),entry);
+        }catch(RuntimeException e){
+            return Response.status(Response.Status.UNPROCESSABLE_ENTITY)
+                .type(MediaType.APPLICATION_JSON_TYPE)
+                .entity(Map.of(
+                    "ok",false,
+                    "error","nui_asset_read_failed",
+                    "entry",entry,
+                    "message",String.valueOf(e.getMessage()==null?e.getClass().getSimpleName():e.getMessage())
+                ))
+                .build();
+        }
         if(asset==null) throw new NotFoundException("nui_asset_not_found");
 
         byte[] data=asset.data();
