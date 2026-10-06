@@ -212,9 +212,8 @@ public class CoreResource {
         try{
             if(existing!=null){
                 long existingId=((Number)existing.get("id")).longValue();
-                long releaseCount=db.count("SELECT COUNT(*) FROM releases WHERE product_id=?",existingId);
-                if(!"draft".equals(String.valueOf(existing.get("status"))) || releaseCount>0)
-                    throw new BadRequestException("product_slug_taken");
+                if(!"draft".equals(String.valueOf(existing.get("status"))))
+                    throw new ClientErrorException("product_slug_taken",409);
 
                 pid=existingId;
                 reused=true;
@@ -241,18 +240,32 @@ public class CoreResource {
                     "draft");
             }
 
+            Map<String,Object> existingRelease=db.one("SELECT * FROM releases WHERE product_id=? AND version=?",pid,version);
+            String previousStorage=existingRelease==null?null:String.valueOf(existingRelease.get("storage_path"));
             storagePath=storage.saveRelease(wid,pid,version,fileName,fileBase64);
-            long rid=db.insert("INSERT INTO releases(product_id,version,changelog,file_name,storage_path,published) VALUES(?,?,?,?,?,TRUE)",
-                pid,version,forge.text(b,"release_changelog"),fileName,storagePath);
+
+            long rid;
+            boolean releaseReplaced=false;
+            if(existingRelease!=null){
+                rid=((Number)existingRelease.get("id")).longValue();
+                db.execute("UPDATE releases SET changelog=?,file_name=?,storage_path=?,published=TRUE WHERE id=?",
+                    forge.text(b,"release_changelog"),fileName,storagePath,rid);
+                releaseReplaced=true;
+                if(previousStorage!=null && !previousStorage.equals(storagePath)) storage.delete(previousStorage);
+            }else{
+                rid=db.insert("INSERT INTO releases(product_id,version,changelog,file_name,storage_path,published) VALUES(?,?,?,?,?,TRUE)",
+                    pid,version,forge.text(b,"release_changelog"),fileName,storagePath);
+            }
 
             forge.audit(wid,actor,reused?"product.recovered":"product.created",String.valueOf(pid),name);
-            forge.audit(wid,actor,"release.created",String.valueOf(rid),version);
+            forge.audit(wid,actor,releaseReplaced?"release.replaced":"release.created",String.valueOf(rid),version);
 
             Map<String,Object> out=new LinkedHashMap<>();
             out.put("ok",true);
             out.put("product",db.one("SELECT * FROM products WHERE id=?",pid));
             out.put("release",db.one("SELECT id,product_id,version,changelog,file_name,published,created_at FROM releases WHERE id=?",rid));
             out.put("recovered",reused);
+            out.put("release_replaced",releaseReplaced);
             return ok(out);
         }catch(WebApplicationException e){
             if(storagePath!=null) storage.delete(storagePath);
