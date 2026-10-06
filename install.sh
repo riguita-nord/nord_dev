@@ -10,6 +10,8 @@ BACKUPS="$DATA/backups"
 ENV_FILE="$ETC/nord.env"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 BACKUP_ARCHIVE=""
+DB_RESET_MARKER="$DATA/control/forge-v2-clean-db"
+DB_RESET_PERFORMED=0
 
 log(){ printf '[Nord Forge] %s\n' "$*"; }
 warn(){ printf '[Nord Forge] WARNING: %s\n' "$*" >&2; }
@@ -112,6 +114,30 @@ backup(){
   log "Pre-update snapshot: $BACKUP_ARCHIVE"
 }
 
+reset_legacy_database_once(){
+  if [[ -f "$DB_RESET_MARKER" ]]; then
+    return 0
+  fi
+
+  if [[ -d "$DATA/db" ]] && find "$DATA/db" -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
+    warn "Legacy/pre-V2 database detected. A backup was created and the database will be replaced with a clean Forge V2 schema."
+    rm -rf "$DATA/db"
+    install -d -o nordforge -g nordforge -m 0750 "$DATA/db"
+    DB_RESET_PERFORMED=1
+  else
+    DB_RESET_PERFORMED=1
+  fi
+}
+
+commit_database_generation(){
+  if [[ "$DB_RESET_PERFORMED" -eq 1 ]]; then
+    install -d -o nordforge -g nordforge -m 0750 "$DATA/control"
+    printf '%s\n' "Forge V2 clean database initialized at $(date -u +%FT%TZ)" > "$DB_RESET_MARKER"
+    chown root:nordforge "$DB_RESET_MARKER"
+    chmod 0640 "$DB_RESET_MARKER"
+  fi
+}
+
 install_files(){
   install -m 0755 -d "$ROOT/bin"
   install -m 0755 "core/target/nord-forge-core-$VERSION-runner.jar" "$ROOT/bin/nord-forge-core.jar"
@@ -182,15 +208,22 @@ case "$ACTION" in
   install)
     install_deps
     ensure_user
-    ensure_env
     build
+    stop_services
+    backup
+    reset_legacy_database_once
+    ensure_env
     install_files
     start_services
     if ! health_check; then
       show_failure_logs
+      if rollback; then
+        die "Installation failed; the previous release/database was restored."
+      fi
       die "Initial installation failed health verification."
     fi
-    log "Nord Forge V$VERSION installed and healthy."
+    commit_database_generation
+    log "Nord Forge V$VERSION installed and healthy. Open the web UI to create the first Platform Owner."
     ;;
 
   update)
@@ -199,10 +232,12 @@ case "$ACTION" in
     build
     stop_services
     backup
+    reset_legacy_database_once
     ensure_env
 
     if install_files && start_services && health_check; then
-      log "Nord Forge V$VERSION update committed successfully."
+      commit_database_generation
+      log "Nord Forge V$VERSION update committed successfully. If this was the legacy migration, open the web UI to create the first Platform Owner."
     else
       show_failure_logs
       if rollback; then
