@@ -691,6 +691,65 @@ async function runWorkspaceProvisioning(workspace){
   });
 }
 
+function renderProductProcessing(stateData){
+  const pct=Math.max(0,Math.min(100,Number(stateData.percent||0)));
+  const phase=stateData.phase||'uploading';
+  const labels={
+    validating:['Validating package','Checking ZIP integrity and release metadata...','fa-shield-check'],
+    uploading:['Uploading release','Sending your ZIP securely to Nord Forge...','fa-cloud-arrow-up'],
+    creating:['Creating product','Preparing the product workspace and metadata...','fa-cubes'],
+    release:['Publishing first release','Linking the uploaded package to the new product...','fa-code-branch'],
+    finishing:['Finishing setup','Running final checks and preparing your workspace...','fa-wand-magic-sparkles'],
+    success:['Product ready','Everything is configured and ready to use.','fa-circle-check'],
+    error:['Something went wrong','The operation stopped before completion.','fa-triangle-exclamation']
+  };
+  const item=labels[phase]||labels.uploading;
+  const phrases=stateData.phrases||[
+    'Preparing your Forge workspace...',
+    'Securing release metadata...',
+    'Checking package integrity...',
+    'Linking product services...',
+    'Almost there...'
+  ];
+  modalRoot.innerHTML=
+    '<div class="modal-layer product-processing-layer">'+
+      '<div class="product-processing-modal '+phase+'">'+
+        '<div class="product-processing-orbit"><div class="product-processing-core"><i class="fa-solid '+item[2]+'"></i></div><span></span><span></span><span></span></div>'+
+        '<div class="product-processing-kicker">Nord Forge</div>'+
+        '<h2>'+h(item[0])+'</h2>'+
+        '<p class="product-processing-copy">'+h(item[1])+'</p>'+
+        '<div class="product-processing-progress">'+
+          '<div class="product-processing-progress-top"><span id="processing-status">'+h(stateData.status||phrases[0])+'</span><strong id="processing-percent">'+pct+'%</strong></div>'+
+          '<div class="product-processing-track"><div id="processing-bar" style="width:'+pct+'%"></div></div>'+
+        '</div>'+
+        '<div class="product-processing-steps">'+
+          ['Upload','Validate','Create','Release','Finish'].map((x,i)=>'<div class="'+((stateData.step||1)>i+1?'done':(stateData.step||1)===i+1?'active':'')+'"><span>'+( ((stateData.step||1)>i+1)?'<i class="fa-solid fa-check"></i>':i+1)+'</span><small>'+x+'</small></div>').join('')+
+        '</div>'+
+        (phase==='error'?'<div class="product-processing-error">'+h(stateData.error||'Unknown error')+'</div><button class="btn primary" id="processing-back"><i class="fa-solid fa-arrow-left"></i> Back to wizard</button>':'')+
+      '</div>'+
+    '</div>';
+  if(phase==='error'){
+    const back=modalRoot.querySelector('#processing-back');
+    if(back)back.onclick=stateData.onBack||(()=>{});
+  }
+}
+function updateProductProcessing(percent,status,step){
+  const bar=modalRoot.querySelector('#processing-bar');
+  const pct=modalRoot.querySelector('#processing-percent');
+  const txt=modalRoot.querySelector('#processing-status');
+  if(bar)bar.style.width=Math.max(0,Math.min(100,percent))+'%';
+  if(pct)pct.textContent=Math.max(0,Math.min(100,Math.round(percent)))+'%';
+  if(txt&&status)txt.textContent=status;
+  if(step){
+    modalRoot.querySelectorAll('.product-processing-steps>div').forEach((el,i)=>{
+      el.classList.toggle('done',i+1<step);
+      el.classList.toggle('active',i+1===step);
+      const span=el.querySelector('span');
+      if(span)span.innerHTML=i+1<step?'<i class="fa-solid fa-check"></i>':String(i+1);
+    });
+  }
+}
+
 function createProduct(){
   const draft={
     step:1,
@@ -871,14 +930,30 @@ function createProduct(){
     };
     const create=document.querySelector('#product-wizard-create');
     if(create)create.onclick=async()=>{
-      create.disabled=true;
-      create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
+      const friendly={
+        release_file_required:'Select the ZIP for the first release.',
+        invalid_base64:'The release file could not be encoded.',
+        zip_required:'The release file must be a ZIP archive.',
+        invalid_zip:'The selected file is not a valid ZIP archive.',
+        release_too_large_512mb:'The release ZIP exceeds the 512 MB limit.',
+        product_slug_taken:'A published product already uses this slug.',
+        release_version_required:'Enter the first release version.'
+      };
       try{
+        renderProductProcessing({phase:'validating',percent:4,step:1,status:'Checking your release package...'});
         await validateZipFile(draft.release_file);
+        updateProductProcessing(8,'ZIP validated. Preparing upload...',1);
+
+        renderProductProcessing({phase:'uploading',percent:8,step:1,status:'Starting secure upload...'});
         const upload=await uploadReleaseBinary(draft.release_file,percent=>{
-          create.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Uploading ZIP '+percent+'%';
+          const mapped=8+(percent*0.62);
+          updateProductProcessing(mapped,'Uploading '+draft.release_file.name+' · '+percent+'%',1);
         });
-        create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
+
+        renderProductProcessing({phase:'creating',percent:72,step:3,status:'Creating product record and workspace metadata...'});
+        await new Promise(r=>setTimeout(r,350));
+        updateProductProcessing(78,'Applying commerce and protection settings...',3);
+
         const result=await api('/workspaces/'+state.workspace.id+'/products/bootstrap',{method:'POST',body:JSON.stringify({
           name:draft.name.trim(),
           slug:draft.slug.trim(),
@@ -893,7 +968,16 @@ function createProduct(){
           release_upload_token:upload.upload_token,
           release_changelog:draft.release_changelog.trim()
         })});
+
+        renderProductProcessing({phase:'release',percent:88,step:4,status:'Publishing v'+draft.release_version.trim()+' and linking the package...'});
+        await new Promise(r=>setTimeout(r,450));
+        renderProductProcessing({phase:'finishing',percent:96,step:5,status:'Finalizing product workspace...'});
+        await new Promise(r=>setTimeout(r,550));
+
         const product=result.product;
+        renderProductProcessing({phase:'success',percent:100,step:6,status:'Product and first release are ready.'});
+        await new Promise(r=>setTimeout(r,900));
+
         modalRoot.innerHTML='';
         state.productId=product.id;
         state.productTab='overview';
@@ -901,18 +985,15 @@ function createProduct(){
         toast(result.recovered?'Recovered draft and created first release':'Product and first release created');
         renderShell();loadView();
       }catch(e){
-        const friendly={
-          release_file_required:'Select the ZIP for the first release.',
-          invalid_base64:'The release file could not be encoded.',
-          zip_required:'The release file must be a ZIP archive.',
-          invalid_zip:'The selected file is not a valid ZIP archive.',
-          release_too_large_512mb:'The release ZIP exceeds the 512 MB limit.',
-          product_slug_taken:'A published product already uses this slug.',
-          release_version_required:'Enter the first release version.'
-        };
-        toast(friendly[e.message]||e.message);
-        create.disabled=false;
-        create.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Create product & release';
+        const message=friendly[e.message]||e.message||'Unknown error';
+        renderProductProcessing({
+          phase:'error',
+          percent:0,
+          step:1,
+          error:message,
+          status:'Creation stopped before completion.',
+          onBack:()=>draw()
+        });
       }
     };
   };
