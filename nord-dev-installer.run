@@ -1,18 +1,30 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Compatibility launcher kept for servers that still have the old nord-dev name.
-# The Forge V2 launcher owns the actual install/update flow.
+# Compatibility entrypoint for servers that still have the legacy Nord Dev installer.
+# Any install/update through this legacy name intentionally performs a FULL replacement:
+# old application directories + old data are backed up externally, deleted, then Forge V2
+# is installed from a clean database. Future updates use "nord-forge update".
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODE="${1:-update}"
+
+case "$MODE" in
+  install|update|replace) TARGET_MODE="replace" ;;
+  version|--version|-V) TARGET_MODE="version" ;;
+  uninstall) TARGET_MODE="uninstall" ;;
+  *) echo "Usage: $0 [install|update|replace|uninstall|version]" >&2; exit 2 ;;
+esac
 
 if [[ -x "$SELF_DIR/nord-forge-installer.run" ]]; then
-  exec "$SELF_DIR/nord-forge-installer.run" "$@"
+  exec "$SELF_DIR/nord-forge-installer.run" "$TARGET_MODE"
 fi
 
 if [[ -x /opt/nord-forge/nord-forge-installer.run ]]; then
-  exec /opt/nord-forge/nord-forge-installer.run "$@"
+  exec /opt/nord-forge/nord-forge-installer.run "$TARGET_MODE"
 fi
 
-echo "[Nord Dev -> Forge V2] Compatibility launcher cannot find nord-forge-installer.run." >&2
-echo "Download the current nord_dev main source or run the legacy updater once so it fetches Forge V2." >&2
-exit 1
+TMP="$(mktemp /tmp/nord-forge-installer.XXXXXX.run)"
+trap 'rm -f "$TMP"' EXIT
+curl -fsSL --retry 2 "https://raw.githubusercontent.com/riguita-nord/nord_dev/main/nord-forge-installer.run" -o "$TMP"
+chmod 0755 "$TMP"
+exec "$TMP" "$TARGET_MODE"
