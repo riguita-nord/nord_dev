@@ -315,14 +315,6 @@ public class CoreResource {
         long wid=((Number)p.get("workspace_id")).longValue();
         forge.requireWorkspace(uid(session),wid);
 
-        Map<String,Object> project=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
-        if(project!=null){
-            Map<String,Object> out=new LinkedHashMap<>(project);
-            out.put("source","saved");
-            out.put("detected",false);
-            return ok(out);
-        }
-
         Map<String,Object> latest=db.one("""
           SELECT id,version,file_name,storage_path,created_at
           FROM releases
@@ -331,17 +323,34 @@ public class CoreResource {
           LIMIT 1
           """,pid);
 
+        Map<String,Object> releasePreview=Map.of();
         if(latest!=null){
             Map<String,Object> imported=storage.importNuiFromRelease(String.valueOf(latest.get("storage_path")));
-            if(!imported.isEmpty()){
-                Map<String,Object> out=new LinkedHashMap<>(imported);
-                out.put("product_id",pid);
+            if(!imported.isEmpty()) releasePreview=imported;
+        }
+
+        Map<String,Object> project=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
+        if(project!=null){
+            Map<String,Object> out=new LinkedHashMap<>(project);
+            out.put("source","saved");
+            out.put("detected",false);
+            out.put("preview_messages",releasePreview.getOrDefault("preview_messages",List.of()));
+            if(latest!=null){
                 out.put("release_id",latest.get("id"));
                 out.put("release_version",latest.get("version"));
                 out.put("release_file_name",latest.get("file_name"));
-                out.put("updated_at",null);
-                return ok(out);
             }
+            return ok(out);
+        }
+
+        if(latest!=null&&!releasePreview.isEmpty()){
+            Map<String,Object> out=new LinkedHashMap<>(releasePreview);
+            out.put("product_id",pid);
+            out.put("release_id",latest.get("id"));
+            out.put("release_version",latest.get("version"));
+            out.put("release_file_name",latest.get("file_name"));
+            out.put("updated_at",null);
+            return ok(out);
         }
 
         Map<String,Object> fallback=new LinkedHashMap<>();
