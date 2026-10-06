@@ -49,3 +49,30 @@
 @media(max-width:1000px){.setup-shell{grid-template-columns:300px minmax(0,1fr)}.setup-sidebar{padding:28px 24px}.setup-side-copy h1{font-size:34px}.setup-visual{height:270px}.setup-topbar,.setup-actions{padding-left:30px;padding-right:30px}.setup-stage{padding:34px 30px}}
 @media(max-width:760px){.setup-shell{grid-template-columns:1fr}.setup-sidebar{display:none}.setup-topbar,.setup-actions{padding-left:20px;padding-right:20px}.setup-stage{padding:28px 20px}.setup-step h2{font-size:28px}.security-grid{grid-template-columns:1fr 1fr}.password-meter{grid-template-columns:1fr}.setup-review{grid-template-columns:1fr}.setup-review>div,.setup-review>div:nth-child(odd){border-right:0;border-bottom:1px solid var(--line)}.setup-review>div:last-child{border-bottom:0}}
 @media(prefers-reduced-motion:reduce){.nord-boot:before,.nord-boot-mark-inner,.nord-boot-pulse,.nord-boot-loader span,.setup-sidebar:before,.setup-core,.setup-node,.setup-orbit{animation:none!important}.setup-shell,.setup-step{animation:none!important}}
+
+/* Setup layout stability fixes */
+.setup-main{min-width:0;width:100%;overflow:hidden}
+.setup-stage{min-width:0;width:100%}
+.setup-step{min-width:0}
+.setup-actions{width:100%;min-width:0;box-sizing:border-box;gap:12px;overflow:hidden}
+.setup-action-right{display:flex;align-items:center;justify-content:flex-end;min-width:0;max-width:100%}
+.setup-btn{flex:0 0 auto;max-width:100%;white-space:nowrap}
+.setup-input input:-webkit-autofill,
+.setup-input input:-webkit-autofill:hover,
+.setup-input input:-webkit-autofill:focus,
+.setup-input input:-webkit-autofill:active{
+  -webkit-text-fill-color:var(--text)!important;
+  -webkit-box-shadow:0 0 0 1000px var(--panel) inset!important;
+  box-shadow:0 0 0 1000px var(--panel) inset!important;
+  caret-color:var(--text);
+  transition:background-color 9999s ease-out 0s
+}
+@media(max-width:760px){
+  .setup-actions{padding:0 18px;gap:10px}
+  .setup-actions .setup-btn{height:40px;padding:0 14px}
+  .setup-action-right{margin-left:auto}
+}
+@media(max-width:440px){
+  .setup-actions{padding:0 12px}
+  .setup-btn{font-size:9px;padding:0 11px}
+}
