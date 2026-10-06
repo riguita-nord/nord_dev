@@ -33,7 +33,7 @@ public class SecurityService {
         validatePassword(password);
         if(db.count("SELECT COUNT(*) FROM users WHERE email=?",email)>0) throw new BadRequestException("email_exists");
         boolean owner=db.count("SELECT COUNT(*) FROM users")==0;
-        String forgeKey="FG-"+token(4).substring(0,8).toUpperCase(Locale.ROOT)+"-"+token(4).substring(0,8).toUpperCase(Locale.ROOT);
+        String forgeKey="FG-"+token(8).substring(0,8).toUpperCase(Locale.ROOT)+"-"+token(8).substring(0,8).toUpperCase(Locale.ROOT);
         long id=db.insert("INSERT INTO users(email,display_name,password_hash,forge_key,platform_owner) VALUES(?,?,?,?,?)",email,displayName,hashPassword(password),forgeKey,owner);
         return createSession(id);
     }
