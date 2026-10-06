@@ -659,12 +659,16 @@ function createProduct(){
     step:1,
     name:'',
     slug:'',
+    slugTouched:false,
     category:'scripts',
     description:'',
     price_cents:0,
     currency:'EUR',
     protection_mode:'LICENSE_ONLY',
-    license_required:true
+    license_required:true,
+    release_version:'1.0.0',
+    release_changelog:'',
+    release_file:null
   };
   const categories=[
     ['scripts','fa-code','Scripts'],
@@ -682,15 +686,17 @@ function createProduct(){
   const draw=()=>{
     const price=money(draft.price_cents,draft.currency);
     const protection=protectionOptions.find(x=>x[0]===draft.protection_mode)||protectionOptions[1];
+    const releaseFileName=draft.release_file?draft.release_file.name:'No ZIP selected';
+    const releaseFileSize=draft.release_file?Math.max(1,Math.round(draft.release_file.size/1024))+' KB':'Choose the first production ZIP';
     modalRoot.innerHTML=
       '<div class="modal-layer product-wizard-layer">'+
         '<div class="product-create-wizard">'+
           '<header class="product-create-head">'+
-            '<div><div class="side-kicker">New product</div><h2>Create a Forge product</h2><p>Configure identity, commerce and runtime behavior before Forge creates the draft.</p></div>'+
+            '<div><div class="side-kicker">New product</div><h2>Create a Forge product</h2><p>Configure the product and upload its first release before Forge creates it.</p></div>'+
             '<button class="icon-btn" id="product-wizard-close"><i class="fa-solid fa-xmark"></i></button>'+
           '</header>'+
           '<div class="product-create-progress">'+
-            [1,2,3,4].map((i)=>'<div class="'+(i===draft.step?'current':i<draft.step?'done':'')+'"><span>'+(i<draft.step?'<i class="fa-solid fa-check"></i>':i)+'</span><small>'+['Identity','Commerce','Protection','Review'][i-1]+'</small></div>').join('')+
+            [1,2,3,4,5].map((i)=>'<div class="'+(i===draft.step?'current':i<draft.step?'done':'')+'"><span>'+(i<draft.step?'<i class="fa-solid fa-check"></i>':i)+'</span><small>'+['Identity','Commerce','Protection','First Release','Review'][i-1]+'</small></div>').join('')+
           '</div>'+
           '<div class="product-create-layout">'+
             '<section class="product-create-stage">'+
@@ -700,7 +706,7 @@ function createProduct(){
                   '<div class="field"><label>Name</label><input id="pc-name" value="'+h(draft.name)+'" placeholder="Nord Inventory" autofocus></div>'+
                   '<div class="field"><label>Slug</label><div class="input-icon"><i class="fa-solid fa-link"></i><input id="pc-slug" value="'+h(draft.slug)+'" placeholder="nord-inventory"></div><small>Used in URLs and runtime identification.</small></div>'+
                   '<div class="field"><label>Category</label><div class="product-category-grid">'+categories.map(x=>'<button type="button" class="'+(draft.category===x[0]?'active':'')+'" data-product-category="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i><span>'+x[2]+'</span></button>').join('')+'</div></div>'+
-                  '<div class="field"><label>Description</label><textarea id="pc-description" rows="5" placeholder="What does this product do?">'+h(draft.description)+'</textarea></div>'+
+                  '<div class="field"><label>Description</label><textarea id="pc-description" rows="4" placeholder="What does this product do?">'+h(draft.description)+'</textarea></div>'+
                 '</div>':'')+
               (draft.step===2?
                 '<div class="product-create-step">'+
@@ -713,7 +719,7 @@ function createProduct(){
                     '<div class="field"><label>Price</label><div class="price-input"><input id="pc-price" type="number" min="0" step="1" value="'+h(draft.price_cents)+'"><span>cents</span></div><small>'+h(price)+'</small></div>'+
                     '<div class="field"><label>Currency</label><select id="pc-currency"><option '+(draft.currency==='EUR'?'selected':'')+'>EUR</option><option '+(draft.currency==='USD'?'selected':'')+'>USD</option><option '+(draft.currency==='GBP'?'selected':'')+'>GBP</option></select></div>'+
                   '</div>'+
-                  '<div class="product-commerce-note"><i class="fa-solid fa-circle-info"></i><div><strong>Starts as a draft</strong><span>The product will only be publishable after it has a published release.</span></div></div>'+
+                  '<div class="product-commerce-note"><i class="fa-solid fa-circle-info"></i><div><strong>Product starts as a draft</strong><span>The first release is uploaded during this wizard. You can publish the product afterwards.</span></div></div>'+
                 '</div>':'')+
               (draft.step===3?
                 '<div class="product-create-step">'+
@@ -723,16 +729,27 @@ function createProduct(){
                 '</div>':'')+
               (draft.step===4?
                 '<div class="product-create-step">'+
-                  '<div class="wizard-step-heading"><div class="wizard-icon success"><i class="fa-solid fa-rocket"></i></div><div><div class="side-kicker">Step 4</div><h3>Ready to create</h3><p>Review the configuration before creating the product draft.</p></div></div>'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon"><i class="fa-solid fa-code-branch"></i></div><div><div class="side-kicker">Step 4</div><h3>Create the first release</h3><p>Upload the initial production package so the product is ready to manage immediately.</p></div></div>'+
+                  '<div class="split">'+
+                    '<div class="field"><label>Version</label><div class="input-icon"><i class="fa-solid fa-tag"></i><input id="pc-release-version" value="'+h(draft.release_version)+'" placeholder="1.0.0"></div></div>'+
+                    '<div class="field"><label>Release state</label><div class="release-state-card"><i class="fa-solid fa-circle-check"></i><div><strong>Published release</strong><span>Available as the first product build.</span></div></div></div>'+
+                  '</div>'+
+                  '<div class="field"><label>ZIP package</label><label class="product-release-drop '+(draft.release_file?'selected':'')+'" for="pc-release-file"><input id="pc-release-file" type="file" accept=".zip"><div class="release-drop-icon"><i class="fa-solid '+(draft.release_file?'fa-file-zipper':'fa-cloud-arrow-up')+'"></i></div><div><strong id="pc-release-file-name">'+h(releaseFileName)+'</strong><span id="pc-release-file-size">'+h(releaseFileSize)+'</span></div><div class="release-drop-action">'+(draft.release_file?'Replace ZIP':'Choose ZIP')+'</div></label></div>'+
+                  '<div class="field"><label>Changelog</label><textarea id="pc-release-changelog" rows="4" placeholder="Initial production release...">'+h(draft.release_changelog)+'</textarea></div>'+
+                  '<div class="product-commerce-note"><i class="fa-solid fa-box-archive"></i><div><strong>Release is created with the product</strong><span>Forge uploads this ZIP immediately after creating the product record.</span></div></div>'+
+                '</div>':'')+
+              (draft.step===5?
+                '<div class="product-create-step">'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon success"><i class="fa-solid fa-rocket"></i></div><div><div class="side-kicker">Step 5</div><h3>Ready to create</h3><p>Review the complete product and its first release.</p></div></div>'+
                   '<div class="product-review-grid">'+
                     '<div><span>Name</span><strong>'+h(draft.name)+'</strong></div>'+
-                    '<div><span>Slug</span><strong>'+h(draft.slug)+'</strong></div>'+
                     '<div><span>Category</span><strong>'+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</strong></div>'+
                     '<div><span>Price</span><strong>'+h(price)+'</strong></div>'+
                     '<div><span>Protection</span><strong>'+h(protection[2])+'</strong></div>'+
-                    '<div><span>Initial status</span><strong>Draft</strong></div>'+
+                    '<div><span>First release</span><strong>v'+h(draft.release_version)+'</strong></div>'+
+                    '<div><span>Package</span><strong>'+h(draft.release_file?draft.release_file.name:'Missing ZIP')+'</strong></div>'+
                   '</div>'+
-                  '<div class="product-ready-banner"><i class="fa-solid fa-circle-check"></i><div><strong>Configuration complete</strong><span>After creation you will continue inside the new Product Workspace.</span></div></div>'+
+                  '<div class="product-ready-banner"><i class="fa-solid fa-circle-check"></i><div><strong>Product and release are ready</strong><span>Forge will create both and open the Product Workspace automatically.</span></div></div>'+
                 '</div>':'')+
             '</section>'+
             '<aside class="product-create-preview">'+
@@ -741,17 +758,22 @@ function createProduct(){
                 '<div class="product-preview-top"><div class="product-preview-icon"><i class="fa-solid '+categoryIcon()+'"></i></div><span class="pill warn">draft</span></div>'+
                 '<h3>'+h(draft.name||'Untitled product')+'</h3>'+
                 '<p>'+h(draft.description||'Your product description will appear here.')+'</p>'+
-                '<div class="product-preview-meta"><span><i class="fa-solid fa-tag"></i> '+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</span><span><i class="fa-solid '+protection[1]+'"></i> '+h(protection[2])+'</span></div>'+
+                '<div class="product-preview-meta"><span><i class="fa-solid fa-tag"></i> '+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</span><span><i class="fa-solid '+protection[1]+'"></i> '+h(protection[2])+'</span><span><i class="fa-solid fa-code-branch"></i> v'+h(draft.release_version||'1.0.0')+'</span></div>'+
                 '<div class="product-preview-price">'+h(price)+'</div>'+
               '</article>'+
-              '<div class="product-preview-status"><div class="'+(draft.name.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.name.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Product identity</span></div><div class="'+(draft.slug.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.slug.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Valid slug</span></div><div class="ok"><i class="fa-solid fa-check"></i><span>Runtime policy</span></div></div>'+
+              '<div class="product-preview-status">'+
+                '<div class="'+(draft.name.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.name.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Product identity</span></div>'+
+                '<div class="'+(draft.slug.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.slug.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Valid slug</span></div>'+
+                '<div class="ok"><i class="fa-solid fa-check"></i><span>Runtime policy</span></div>'+
+                '<div class="'+(draft.release_file?'ok':'')+'"><i class="fa-solid '+(draft.release_file?'fa-check':'fa-minus')+'"></i><span>First release ZIP</span></div>'+
+              '</div>'+
             '</aside>'+
           '</div>'+
           '<footer class="product-create-foot">'+
             '<button class="btn" id="product-wizard-back" '+(draft.step===1?'disabled':'')+'><i class="fa-solid fa-arrow-left"></i> Back</button>'+
             '<div class="product-create-foot-right">'+
-              '<span>Step '+draft.step+' of 4</span>'+
-              (draft.step<4?'<button class="btn primary" id="product-wizard-next">Continue <i class="fa-solid fa-arrow-right"></i></button>':'<button class="btn primary" id="product-wizard-create"><i class="fa-solid fa-plus"></i> Create product</button>')+
+              '<span>Step '+draft.step+' of 5</span>'+
+              (draft.step<5?'<button class="btn primary" id="product-wizard-next">Continue <i class="fa-solid fa-arrow-right"></i></button>':'<button class="btn primary" id="product-wizard-create"><i class="fa-solid fa-wand-magic-sparkles"></i> Create product & release</button>')+
             '</div>'+
           '</footer>'+
         '</div>'+
@@ -770,6 +792,19 @@ function createProduct(){
     if(free)free.onclick=()=>{draft.price_cents=0;draw()};
     if(paid)paid.onclick=()=>{if(Number(draft.price_cents)===0)draft.price_cents=1000;draw()};
     document.querySelectorAll('[data-product-protection]').forEach(b=>b.onclick=()=>{draft.protection_mode=b.dataset.productProtection;draft.license_required=draft.protection_mode!=='NONE';draw()});
+    const rv=document.querySelector('#pc-release-version'),rc=document.querySelector('#pc-release-changelog'),rf=document.querySelector('#pc-release-file');
+    if(rv)rv.oninput=e=>draft.release_version=e.target.value;
+    if(rc)rc.oninput=e=>draft.release_changelog=e.target.value;
+    if(rf)rf.onchange=e=>{
+      const file=e.target.files&&e.target.files[0];
+      if(!file)return;
+      if(!file.name.toLowerCase().endsWith('.zip')){e.target.value='';return toast('The first release must be a ZIP file.')}
+      draft.release_file=file;
+      const n=document.querySelector('#pc-release-file-name'),s=document.querySelector('#pc-release-file-size');
+      if(n)n.textContent=file.name;
+      if(s)s.textContent=Math.max(1,Math.round(file.size/1024))+' KB';
+      const drop=document.querySelector('.product-release-drop');if(drop)drop.classList.add('selected');
+    };
     document.querySelector('#product-wizard-back').onclick=()=>{if(draft.step>1){draft.step--;draw()}};
     const next=document.querySelector('#product-wizard-next');
     if(next)next.onclick=()=>{
@@ -779,13 +814,19 @@ function createProduct(){
         if(draft.slug.length<2)return toast('Enter a valid product slug.');
       }
       if(draft.step===2&&Number(draft.price_cents)<0)return toast('Price cannot be negative.');
+      if(draft.step===4){
+        if(!draft.release_version.trim())return toast('Enter the first release version.');
+        if(!draft.release_file)return toast('Select the ZIP for the first release.');
+      }
       draft.step++;draw();
     };
     const create=document.querySelector('#product-wizard-create');
     if(create)create.onclick=async()=>{
-      create.disabled=true;create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product...';
+      create.disabled=true;
+      create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
+      let product=null;
       try{
-        const product=await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({
+        product=await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({
           name:draft.name.trim(),
           slug:draft.slug.trim(),
           category:draft.category,
@@ -795,16 +836,27 @@ function createProduct(){
           license_required:draft.protection_mode!=='NONE',
           protection_mode:draft.protection_mode
         })});
+        const base64=await fileBase64(draft.release_file);
+        await api('/products/'+product.id+'/releases',{method:'POST',body:JSON.stringify({
+          version:draft.release_version.trim(),
+          file_name:draft.release_file.name,
+          file_base64:base64,
+          changelog:draft.release_changelog.trim(),
+          published:true
+        })});
         modalRoot.innerHTML='';
         state.productId=product.id;
         state.productTab='overview';
         state.view='products';
-        toast('Product created');
+        toast('Product and first release created');
         renderShell();loadView();
       }catch(e){
+        if(product&&product.id){
+          try{await api('/products/'+product.id,{method:'DELETE',body:'{}'})}catch(ignore){}
+        }
         toast(e.message);
         create.disabled=false;
-        create.innerHTML='<i class="fa-solid fa-plus"></i> Create product';
+        create.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Create product & release';
       }
     };
   };
