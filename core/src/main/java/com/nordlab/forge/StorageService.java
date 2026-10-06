@@ -7,6 +7,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.*;
 import java.nio.file.*;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.zip.ZipInputStream;
 
 @ApplicationScoped
@@ -34,6 +35,57 @@ public class StorageService {
     public byte[] read(String path){
         try{return Files.readAllBytes(Path.of(path));}catch(IOException e){throw new IllegalStateException("release_read_failed",e);}
     }
-    public void delete(String path){ try{Files.deleteIfExists(Path.of(path));}catch(IOException ignored){} }
+    public void delete(String path){
+        if(path==null||path.isBlank()||"null".equalsIgnoreCase(path)) return;
+        try{
+            Path target=Path.of(path).toAbsolutePath().normalize();
+            Path rootPath=Path.of(root).toAbsolutePath().normalize();
+            if(!target.startsWith(rootPath)) throw new IllegalArgumentException("storage_path_outside_root");
+            Files.deleteIfExists(target);
+            deleteEmptyParents(target.getParent(),rootPath.resolve("storage"));
+        }catch(IOException ignored){}
+    }
+
+    public void deleteProductStorage(long workspaceId,long productId){
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path productDir=rootPath.resolve("storage").resolve("releases").resolve(String.valueOf(workspaceId)).resolve(String.valueOf(productId)).normalize();
+        if(!productDir.startsWith(rootPath)) throw new IllegalArgumentException("storage_path_outside_root");
+        deleteTree(productDir);
+        deleteEmptyParents(productDir.getParent(),rootPath.resolve("storage"));
+    }
+
+    public void deleteTree(String path){
+        if(path==null||path.isBlank()||"null".equalsIgnoreCase(path)) return;
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path target=Path.of(path).toAbsolutePath().normalize();
+        if(!target.startsWith(rootPath)) throw new IllegalArgumentException("storage_path_outside_root");
+        deleteTree(target);
+    }
+
+    private void deleteTree(Path target){
+        if(target==null||!Files.exists(target)) return;
+        try(var walk=Files.walk(target)){
+            walk.sorted(Comparator.reverseOrder()).forEach(p->{
+                try{Files.deleteIfExists(p);}catch(IOException e){throw new UncheckedIOException(e);}
+            });
+        }catch(IOException|UncheckedIOException e){
+            throw new IllegalStateException("storage_delete_failed",e);
+        }
+    }
+
+    private void deleteEmptyParents(Path dir,Path stopAt){
+        if(dir==null||stopAt==null) return;
+        Path stop=stopAt.toAbsolutePath().normalize();
+        Path current=dir.toAbsolutePath().normalize();
+        while(current.startsWith(stop)&&!current.equals(stop)){
+            try(DirectoryStream<Path> entries=Files.newDirectoryStream(current)){
+                if(entries.iterator().hasNext()) break;
+            }catch(IOException e){break;}
+            try{Files.deleteIfExists(current);}catch(IOException e){break;}
+            current=current.getParent();
+            if(current==null) break;
+        }
+    }
+
     private String safe(String v){return (v==null?"file":v).replaceAll("[^A-Za-z0-9._-]","_");}
 }
