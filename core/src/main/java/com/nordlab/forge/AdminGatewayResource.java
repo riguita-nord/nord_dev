@@ -57,7 +57,7 @@ public class AdminGatewayResource {
     private Response proxy(String method,String path,UriInfo uri,HttpHeaders headers,byte[] body){
         try{
             String suffix=path==null||path.isBlank()?"":path;
-            String target="http://127.0.0.1:"+adminPort+"/administration/"+suffix;
+            String target="http://127.0.0.1:"+adminPort+"/"+suffix;
             String query=uri.getRequestUri().getRawQuery();
             if(query!=null&&!query.isBlank()) target+="?"+query;
 
