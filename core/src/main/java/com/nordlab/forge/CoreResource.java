@@ -5,6 +5,7 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.sql.Timestamp;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -184,6 +185,23 @@ public class CoreResource {
             wid,name,forge.slug(forge.text(b,"slug").isBlank()?name:forge.text(b,"slug")),forge.text(b,"description"),forge.text(b,"category"),forge.longValue(b,"price_cents",0),forge.text(b,"currency").isBlank()?"EUR":forge.text(b,"currency"),forge.bool(b,"license_required",true),forge.text(b,"protection_mode").isBlank()?"LICENSE_ONLY":forge.text(b,"protection_mode"),"draft");
         forge.audit(wid,actor,"product.created",String.valueOf(pid),name); return ok(db.one("SELECT * FROM products WHERE id=?",pid));
     }
+    @POST
+    @Path("/workspaces/{wid}/release-uploads")
+    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    public Response uploadReleaseBinary(@PathParam("wid") long wid,
+                                        @CookieParam("NF_SESSION") String session,
+                                        @HeaderParam("X-CSRF-Token") String csrf,
+                                        @HeaderParam("X-File-Name") String fileName,
+                                        InputStream input){
+        unsafe(session,csrf);
+        long actor=uid(session);
+        forge.requireWorkspace(actor,wid,"developer","admin");
+        String decoded=fileName==null?"release.zip":java.net.URLDecoder.decode(fileName,StandardCharsets.UTF_8);
+        Map<String,Object> upload=storage.saveReleaseUpload(wid,decoded,input);
+        forge.audit(wid,actor,"release.upload_staged",String.valueOf(upload.get("upload_token")),decoded);
+        return ok(upload);
+    }
+
     @POST @Path("/workspaces/{wid}/products/bootstrap")
     public Response bootstrapProduct(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf);
@@ -199,10 +217,11 @@ public class CoreResource {
 
         String version=forge.text(b,"release_version");
         String fileName=forge.text(b,"release_file_name");
+        String uploadToken=forge.text(b,"release_upload_token");
         String fileBase64=forge.text(b,"release_file_base64");
         if(version.isBlank()) throw new BadRequestException("release_version_required");
         if(fileName.isBlank()||!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) throw new BadRequestException("release_zip_required");
-        if(fileBase64.isBlank()) throw new BadRequestException("release_file_required");
+        if(uploadToken.isBlank()&&fileBase64.isBlank()) throw new BadRequestException("release_file_required");
 
         Map<String,Object> existing=db.one("SELECT * FROM products WHERE workspace_id=? AND slug=?",wid,slug);
         Long pid=null;
@@ -242,7 +261,9 @@ public class CoreResource {
 
             Map<String,Object> existingRelease=db.one("SELECT * FROM releases WHERE product_id=? AND version=?",pid,version);
             String previousStorage=existingRelease==null?null:String.valueOf(existingRelease.get("storage_path"));
-            storagePath=storage.saveRelease(wid,pid,version,fileName,fileBase64);
+            storagePath=!uploadToken.isBlank()
+                ? storage.claimReleaseUpload(wid,pid,version,fileName,uploadToken)
+                : storage.saveRelease(wid,pid,version,fileName,fileBase64);
 
             long rid;
             boolean releaseReplaced=false;
@@ -346,7 +367,10 @@ public class CoreResource {
     public Response createRelease(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf); Map<String,Object> p=db.one("SELECT * FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found"); long wid=((Number)p.get("workspace_id")).longValue(),actor=uid(session); forge.requireWorkspace(actor,wid,"developer","admin"); b=body(b);
         String version=forge.text(b,"version"), file=forge.text(b,"file_name"); if(version.isBlank()) throw new BadRequestException("version_required");
-        String path=storage.saveRelease(wid,pid,version,file,forge.text(b,"file_base64"));
+        String uploadToken=forge.text(b,"upload_token");
+        String path=!uploadToken.isBlank()
+            ? storage.claimReleaseUpload(wid,pid,version,file,uploadToken)
+            : storage.saveRelease(wid,pid,version,file,forge.text(b,"file_base64"));
         long rid=db.insert("INSERT INTO releases(product_id,version,changelog,file_name,storage_path,published) VALUES(?,?,?,?,?,?)",pid,version,forge.text(b,"changelog"),file,path,forge.bool(b,"published",true));
         forge.audit(wid,actor,"release.created",String.valueOf(rid),version); return ok(db.one("SELECT id,product_id,version,changelog,file_name,published,created_at FROM releases WHERE id=?",rid));
     }
