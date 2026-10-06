@@ -238,7 +238,7 @@ install_files(){
 health_check(){
   local ok=0 core_url admin_url
   core_url="http://127.0.0.1:8088/api/v2/setup/status"
-  admin_url="http://127.0.0.1:8089/administration/api/health"
+  admin_url="http://127.0.0.1:8089/api/health"
 
   for _ in $(seq 1 45); do
     if systemctl is-active --quiet nord-forge.service &&
