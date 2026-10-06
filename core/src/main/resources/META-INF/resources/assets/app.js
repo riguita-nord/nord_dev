@@ -122,7 +122,10 @@ function renderSetup(){
     const name=document.querySelector('#setup-name'),email=document.querySelector('#setup-email'),password=document.querySelector('#setup-password');
     if(name)name.oninput=e=>setup.name=e.target.value;
     if(email)email.oninput=e=>setup.email=e.target.value;
-    if(password)password.oninput=e=>{setup.password=e.target.value;render()};
+    if(password)password.oninput=e=>{
+      setup.password=e.target.value;
+      updatePasswordUi(setup.password);
+    };
     const eye=document.querySelector('#setup-eye');
     if(eye)eye.onclick=()=>{const p=document.querySelector('#setup-password');const show=p.type==='password';p.type=show?'text':'password';eye.innerHTML='<i class="fa-solid '+(show?'fa-eye-slash':'fa-eye')+'"></i>'};
     const back=document.querySelector('#setup-back');
@@ -146,6 +149,26 @@ function renderSetup(){
     };
   };
   render();
+}
+function updatePasswordUi(password){
+  const strength=passwordStrength(password);
+  const meter=document.querySelector('.password-meter-bar span');
+  if(meter)meter.style.width=strength.percent+'%';
+  const copy=document.querySelector('.password-meter>div:last-child');
+  if(copy)copy.innerHTML='<strong>'+h(strength.label)+'</strong><span>'+h(strength.help)+'</span>';
+
+  const rules=[
+    password.length>=10,
+    /[A-Z]/.test(password),
+    /[0-9]/.test(password),
+    /[^A-Za-z0-9]/.test(password)
+  ];
+  document.querySelectorAll('.security-grid>div').forEach((el,i)=>{
+    const ok=!!rules[i];
+    el.classList.toggle('ok',ok);
+    const icon=el.querySelector('i');
+    if(icon)icon.className='fa-solid '+(ok?'fa-check':'fa-minus');
+  });
 }
 function passwordStrength(password){
   let score=0;
