@@ -49,24 +49,34 @@ public class DomainManagementResource {
     }
 
     @DELETE @Path("/workspaces/{wid}")
-    public Response deleteWorkspace(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf){
+    public Response deleteWorkspace(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
         unsafe(session,csrf); long actor=uid(session);
         Map<String,Object> w=forge.workspace(wid);
         if(((Number)w.get("owner_id")).longValue()!=actor) throw new ForbiddenException("workspace_owner_required");
+        String confirmation=text(b,"confirmation");
+        if(!String.valueOf(w.get("name")).equals(confirmation)) throw new BadRequestException("workspace_confirmation_mismatch");
+
         List<Map<String,Object>> products=db.query("SELECT id FROM products WHERE workspace_id=?",wid);
         for(Map<String,Object> p:products){
             long pid=((Number)p.get("id")).longValue();
-            for(Map<String,Object> r:db.query("SELECT storage_path FROM releases WHERE product_id=?",pid)) storage.delete(String.valueOf(r.get("storage_path")));
+            for(Map<String,Object> r:db.query("SELECT storage_path FROM releases WHERE product_id=?",pid))
+                storage.delete(String.valueOf(r.get("storage_path")));
+            for(Map<String,Object> m:db.query("SELECT pm.storage_path FROM protection_modules pm JOIN protection_builds pb ON pb.build_id=pm.build_id WHERE pb.product_id=?",pid))
+                storage.delete(String.valueOf(m.get("storage_path")));
+
             db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
             db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE product_id=?)",pid);
             db.execute("DELETE FROM protection_installations WHERE product_id=?",pid);
+            db.execute("DELETE FROM protection_revocations WHERE workspace_id=?",wid);
             db.execute("DELETE FROM protection_builds WHERE product_id=?",pid);
             db.execute("DELETE FROM product_protection WHERE product_id=?",pid);
+            db.execute("DELETE FROM license_logs WHERE product_id=?",pid);
             db.execute("DELETE FROM license_activations WHERE license_id IN(SELECT id FROM licenses WHERE product_id=?)",pid);
             db.execute("DELETE FROM licenses WHERE product_id=?",pid);
             db.execute("DELETE FROM entitlements WHERE product_id=?",pid);
             db.execute("DELETE FROM releases WHERE product_id=?",pid);
         }
+
         db.execute("DELETE FROM purchase_messages WHERE thread_id IN(SELECT id FROM purchase_threads WHERE workspace_id=?)",wid);
         db.execute("DELETE FROM purchase_threads WHERE workspace_id=?",wid);
         db.execute("DELETE FROM support_messages WHERE ticket_id IN(SELECT id FROM support_tickets WHERE workspace_id=?)",wid);
@@ -76,6 +86,7 @@ public class DomainManagementResource {
         db.execute("DELETE FROM integrations WHERE workspace_id=?",wid);
         db.execute("DELETE FROM infra_nodes WHERE workspace_id=?",wid);
         db.execute("DELETE FROM api_keys WHERE workspace_id=?",wid);
+        db.execute("DELETE FROM bot_events WHERE workspace_id=?",wid);
         db.execute("DELETE FROM workspace_members WHERE workspace_id=?",wid);
         db.execute("DELETE FROM products WHERE workspace_id=?",wid);
         db.execute("DELETE FROM audit_events WHERE workspace_id=?",wid);
