@@ -530,7 +530,7 @@ function renderProductWorkspace(d){
           '<div class="nui-builder-toolbar-actions">'+
             '<button class="btn" id="nui-structure-toggle"><i class="fa-solid fa-sitemap"></i> Pages</button>'+
             '<button class="btn" id="nui-refresh"><i class="fa-solid fa-rotate-right"></i> Preview</button>'+
-            '<button class="btn" id="nui-export"><i class="fa-solid fa-file-export"></i> Export HTML</button>'+
+            '<button class="btn" id="nui-export"><i class="fa-solid fa-file-export"></i> Export</button>'+
             '<button class="btn primary" id="nui-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>'+
           '</div>'+
         '</header>'+
