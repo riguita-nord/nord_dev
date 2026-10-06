@@ -99,6 +99,15 @@ EOF
 }
 
 build(){
+  log "Validating Nord Forge frontend before touching the running release..."
+  if command -v node >/dev/null 2>&1; then
+    node --check core/src/main/resources/META-INF/resources/assets/app.js || die "Core frontend JavaScript validation failed."
+    node --check core/src/main/resources/META-INF/resources/assets/store.js || die "Store frontend JavaScript validation failed."
+    node --check admin-service/src/main/resources/META-INF/resources/admin.js || die "Administration frontend JavaScript validation failed."
+  else
+    warn "Node.js is not installed; frontend syntax validation was skipped."
+  fi
+
   log "Building Nord Forge V$VERSION before touching the running release..."
   mvn -B -DskipTests package
   [[ -f "core/target/nord-forge-core-$VERSION-runner.jar" ]] || die "Core runner missing."
