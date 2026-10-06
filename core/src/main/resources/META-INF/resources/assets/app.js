@@ -528,6 +528,7 @@ function renderProductWorkspace(d){
             '<span class="nui-zoom-label" id="nui-zoom-label">Fit</span>'+
           '</div>'+
           '<div class="nui-builder-toolbar-actions">'+
+            '<button class="btn" id="nui-structure-toggle"><i class="fa-solid fa-sitemap"></i> Pages</button>'+
             '<button class="btn" id="nui-refresh"><i class="fa-solid fa-rotate-right"></i> Preview</button>'+
             '<button class="btn" id="nui-export"><i class="fa-solid fa-file-export"></i> Export HTML</button>'+
             '<button class="btn primary" id="nui-save"><i class="fa-solid fa-floppy-disk"></i> Save</button>'+
@@ -556,6 +557,10 @@ function renderProductWorkspace(d){
           '<main class="nui-builder-preview-area">'+
             '<div class="nui-preview-stage desktop" id="nui-preview-stage">'+
               '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts"></iframe>'+
+              '<aside class="nui-structure-explorer" id="nui-structure-explorer" hidden>'+
+                '<div class="nui-structure-head"><div><strong>NUI Structure</strong><span id="nui-structure-interface">Detecting interface…</span></div><button id="nui-structure-close"><i class="fa-solid fa-xmark"></i></button></div>'+
+                '<div class="nui-structure-body" id="nui-structure-body"><div class="nui-structure-empty"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Scanning NUI…</span></div></div>'+
+              '</aside>'+
             '</div>'+
           '</main>'+
           '<aside class="nui-builder-code">'+
@@ -569,7 +574,7 @@ function renderProductWorkspace(d){
               '<textarea id="nui-css" data-nui-pane="css" spellcheck="false"></textarea>'+
               '<textarea id="nui-js" data-nui-pane="js" spellcheck="false"></textarea>'+
             '</div>'+
-            '<footer class="nui-code-foot"><span id="nui-save-state"><i class="fa-solid fa-circle"></i> Loading project…</span><span>Live preview</span></footer>'+
+            '<footer class="nui-code-foot"><span id="nui-save-state"><i class="fa-solid fa-circle"></i> Loading project…</span></footer>'+
           '</aside>'+
         '</div>'+
       '</div>';
@@ -893,6 +898,119 @@ async function initNuiBuilder(p){
         },500);
       }
 
+      const nordLabel=el=>{
+        const explicit=el.getAttribute&&(
+          el.getAttribute('data-label')||
+          el.getAttribute('aria-label')||
+          el.getAttribute('title')||
+          el.getAttribute('data-page')||
+          el.getAttribute('data-view')||
+          el.getAttribute('data-section')
+        );
+        const heading=el.querySelector&&el.querySelector('h1,h2,h3,h4,.title,.heading,.modal-title');
+        const raw=explicit||(heading&&heading.textContent)||el.textContent||el.id||el.className||'Untitled';
+        return String(raw).replace(/\s+/g,' ').trim().slice(0,70);
+      };
+
+      const nordElementKey=el=>{
+        if(!el)return '';
+        if(el.id)return '#'+el.id;
+        if(el.getAttribute){
+          for(const attr of ['data-page','data-view','data-section','data-modal','data-action']){
+            const value=el.getAttribute(attr);
+            if(value)return '['+attr+'="'+String(value).replace(/"/g,'')+'"]';
+          }
+        }
+        const cls=[...(el.classList||[])].filter(Boolean).slice(0,3);
+        if(cls.length)return '.'+cls.join('.');
+        return '';
+      };
+
+      const detectStructure=()=>{
+        const root=selectedRoot||document.body;
+        if(!root)return {pages:[],modals:[],actions:[]};
+
+        const visibleOrMeaningful=el=>{
+          if(!el||el===root)return false;
+          const key=((el.id||'')+' '+(el.className||'')+' '+(el.getAttribute?.('role')||'')).toLowerCase();
+          return !!key;
+        };
+
+        const pageSelector='[data-page],[data-view],[data-section],.page,.view,.screen,.tab-panel,.content-page,[id$="Page"],[id$="View"],[id*="dashboard"],[id*="settings"],[id*="recipe"],[id*="bench"],[id*="blueprint"]';
+        const modalSelector='[role="dialog"],[aria-modal="true"],.modal,.dialog,.popup,.overlay,.confirm,.modal-window,[id*="modal"],[id*="dialog"],[id*="popup"]';
+        const actionSelector='button,[role="button"],a[href="#"],[data-action],[onclick]';
+
+        const topLevel=(items)=>items.filter((el,idx,arr)=>!arr.some(other=>other!==el&&other.contains(el)));
+
+        let pages=topLevel([...root.querySelectorAll(pageSelector)].filter(visibleOrMeaningful)).slice(0,30);
+        let modals=topLevel([...root.querySelectorAll(modalSelector)].filter(visibleOrMeaningful)).slice(0,30);
+        let actions=[...root.querySelectorAll(actionSelector)]
+          .filter(el=>nordLabel(el).length>0)
+          .slice(0,50);
+
+        const toEntry=(el,index,type)=>({
+          id:type+'-'+index,
+          type,
+          label:nordLabel(el),
+          key:nordElementKey(el)
+        });
+
+        const structure={
+          interfaceId:selected,
+          interfaceLabel:nordLabel(root),
+          pages:pages.map((el,i)=>toEntry(el,i,'page')),
+          modals:modals.map((el,i)=>toEntry(el,i,'modal')),
+          actions:actions.map((el,i)=>toEntry(el,i,'action'))
+        };
+        window.__nordStructureRefs={};
+        [...pages,...modals,...actions].forEach((el,index)=>{
+          const type=index<pages.length?'page':index<pages.length+modals.length?'modal':'action';
+          const offset=type==='page'?index:type==='modal'?index-pages.length:index-pages.length-modals.length;
+          window.__nordStructureRefs[type+'-'+offset]=el;
+        });
+        parent.postMessage({type:'nord-nui-structure',interfaceId:selected,structure},'*');
+        return structure;
+      };
+
+      const activateStructureItem=(kind,id)=>{
+        const refs=window.__nordStructureRefs||{};
+        const el=refs[id];
+        if(!el)return;
+
+        if(kind==='page'){
+          const pages=Object.entries(refs).filter(([key])=>key.startsWith('page-')).map(([,node])=>node);
+          pages.forEach(page=>{
+            const active=page===el;
+            page.style.setProperty('display',active?'block':'none','important');
+            if(active){
+              page.style.setProperty('visibility','visible','important');
+              page.style.setProperty('opacity','1','important');
+              page.hidden=false;
+            }
+          });
+        }else if(kind==='modal'){
+          el.style.setProperty('display','block','important');
+          el.style.setProperty('visibility','visible','important');
+          el.style.setProperty('opacity','1','important');
+          el.hidden=false;
+          el.classList.remove('hidden','hide','d-none');
+        }else if(kind==='action'){
+          try{el.click()}catch(e){}
+          try{el.focus({preventScroll:true})}catch(e){}
+        }
+        setTimeout(()=>{reportBounds();fitSelected();detectStructure()},40);
+      };
+
+      addEventListener('message',event=>{
+        const data=event.data||{};
+        if(data.type==='nord-builder-structure-action'){
+          activateStructureItem(data.kind,data.id);
+        }
+        if(data.type==='nord-builder-scan-structure'){
+          detectStructure();
+        }
+      });
+
       const setupAdminNavigation=()=>{
         if(!selectedRoot)return;
         const selectedKey=(selected||'').toLowerCase();
@@ -1133,8 +1251,8 @@ async function initNuiBuilder(p){
           viewportHeight:innerHeight
         },'*');
       };
-      setTimeout(()=>{setupAdminNavigation();reportBounds();fitSelected()},80);
-      setTimeout(()=>{reportBounds();fitSelected()},360);
+      setTimeout(()=>{setupAdminNavigation();detectStructure();reportBounds();fitSelected()},80);
+      setTimeout(()=>{detectStructure();reportBounds();fitSelected()},360);
       setTimeout(()=>fitSelected(),780);
       addEventListener('resize',()=>{reportBounds();fitSelected()});
     })();
@@ -1276,6 +1394,10 @@ async function initNuiBuilder(p){
   const previewMessage=e=>{
     const data=e.data||{};
     if(data.interfaceId!==selectedInterface)return;
+    if(data.type==='nord-nui-structure'){
+      renderStructure(data.structure||{});
+      return;
+    }
     if(data.type==='nord-nui-preview-error'){
       const stateEl=document.querySelector('#nui-save-state');
       if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i> Preview JS: '+h(data.message||'error');
@@ -1301,6 +1423,59 @@ async function initNuiBuilder(p){
     }
   };
   window.addEventListener('message',previewMessage);
+
+  const structureToggle=document.querySelector('#nui-structure-toggle');
+  const structureExplorer=document.querySelector('#nui-structure-explorer');
+  const structureClose=document.querySelector('#nui-structure-close');
+  const structureBody=document.querySelector('#nui-structure-body');
+  const structureInterface=document.querySelector('#nui-structure-interface');
+  let currentStructure={pages:[],modals:[],actions:[]};
+
+  const renderStructure=structure=>{
+    currentStructure=structure||{pages:[],modals:[],actions:[]};
+    if(structureInterface)structureInterface.textContent=currentStructure.interfaceLabel||selectedInterface||'Current interface';
+    if(!structureBody)return;
+    const section=(title,icon,items,kind)=>{
+      if(!items||!items.length)return '';
+      return '<section class="nui-structure-section">'+
+        '<div class="nui-structure-section-title"><i class="fa-solid '+icon+'"></i><span>'+h(title)+'</span><b>'+items.length+'</b></div>'+
+        '<div class="nui-structure-list">'+items.map(item=>
+          '<button data-structure-kind="'+kind+'" data-structure-id="'+h(item.id)+'">'+
+            '<i class="fa-solid '+(kind==='page'?'fa-file-lines':kind==='modal'?'fa-window-restore':'fa-bolt')+'"></i>'+
+            '<span>'+h(item.label||item.id)+'</span>'+
+            '<i class="fa-solid fa-chevron-right"></i>'+
+          '</button>'
+        ).join('')+'</div>'+
+      '</section>';
+    };
+    const htmlOut=
+      section('Pages','fa-layer-group',currentStructure.pages,'page')+
+      section('Modals','fa-window-maximize',currentStructure.modals,'modal')+
+      section('Actions','fa-bolt',currentStructure.actions,'action');
+    structureBody.innerHTML=htmlOut||'<div class="nui-structure-empty"><i class="fa-solid fa-diagram-project"></i><span>No pages, modals or actions detected.</span></div>';
+    structureBody.querySelectorAll('[data-structure-id]').forEach(btn=>btn.onclick=()=>{
+      try{
+        frame.contentWindow.postMessage({
+          type:'nord-builder-structure-action',
+          kind:btn.dataset.structureKind,
+          id:btn.dataset.structureId
+        },'*');
+      }catch(e){}
+    });
+  };
+
+  if(structureToggle)structureToggle.onclick=()=>{
+    const opening=structureExplorer&&structureExplorer.hidden;
+    if(structureExplorer)structureExplorer.hidden=!opening;
+    structureToggle.classList.toggle('active',!!opening);
+    if(opening){
+      try{frame.contentWindow.postMessage({type:'nord-builder-scan-structure'},'*')}catch(e){}
+    }
+  };
+  if(structureClose)structureClose.onclick=()=>{
+    if(structureExplorer)structureExplorer.hidden=true;
+    if(structureToggle)structureToggle.classList.remove('active');
+  };
 
   const snippets={
     container:'\n<div class="container">\n  <!-- content -->\n</div>\n',
