@@ -279,7 +279,58 @@ async function buy(id){try{const d=await api('/purchases',{method:'POST',body:JS
 function createSupport(){modal('New support ticket','<form class="form"><div class="field"><label>Subject</label><input name="subject" required></div><div class="field"><label>Priority</label><select name="priority"><option>normal</option><option>high</option><option>low</option></select></div><div class="field"><label>Message</label><textarea name="message" rows="6" required></textarea></div></form>',async fd=>{await api('/client/support',{method:'POST',body:JSON.stringify({subject:formVal(fd,'subject'),priority:formVal(fd,'priority'),message:formVal(fd,'message')})});toast('Ticket created');loadView()})}
 async function loadDev(){
 if(!state.workspace){state.surface='client';state.view='home';renderShell();return loadClient()}const wid=state.workspace.id;
-if(state.view==='overview'){setTitle('Workspace overview');const d=await api('/workspaces/'+wid+'/dashboard');content('<div class="hero"><div><h1>'+h(d.workspace.name)+'</h1><p>Development workspace · '+h(d.role)+'</p></div><span class="pill '+(d.workspace.status==='active'?'good':'warn')+'">'+h(d.workspace.status)+'</span></div>'+metrics([['Products',d.products,'All products'],['Published',d.published_products,'Marketplace ready'],['Licenses',d.licenses,'Active runtime licenses'],['Members',d.members,'Workspace team'],['Support',d.open_support,'Open tickets'],['Purchases',d.open_purchases,'Open requests']])+'<div class="panel"><div class="panel-head"><div><h2>Workspace boundary</h2><p>This surface is intentionally separate from Client Area.</p></div></div><div class="panel-body"><div class="notice good">Products, releases, licensing, docs, integrations and audit are scoped to this workspace. Customer purchases stay visible in Client Area.</div></div></div>'+(String(d.role)==='owner'?'<div class="panel danger-zone"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently delete this workspace and its Forge data.</p></div><button class="btn danger" id="delete-workspace"><i class="fa-solid fa-trash"></i> Delete workspace</button></div></div>':''));if(document.querySelector('#delete-workspace'))document.querySelector('#delete-workspace').onclick=deleteCurrentWorkspace;return}
+if(state.view==='overview'){
+  setTitle('Overview');
+  const d=await api('/workspaces/'+wid+'/dashboard');
+  content(
+    '<div class="workspace-page">'+
+      '<section class="workspace-overview-head">'+
+        '<div class="workspace-overview-title">'+
+          '<div class="workspace-symbol">'+h((d.workspace.name||'W').slice(0,2).toUpperCase())+'</div>'+
+          '<div><div class="side-kicker">Developer workspace</div><h1>'+h(d.workspace.name)+'</h1><p>Products, releases, licensing and runtime operations in one workspace.</p></div>'+
+        '</div>'+
+        '<div class="workspace-head-actions"><span class="pill '+(d.workspace.status==='active'?'good':'warn')+'"><i class="fa-solid fa-circle"></i> '+h(d.workspace.status)+'</span><span class="workspace-role-chip"><i class="fa-solid fa-user-shield"></i> '+h(d.role)+'</span></div>'+
+      '</section>'+
+      '<section class="workspace-kpis">'+
+        '<button class="workspace-kpi" data-jump="products"><i class="fa-solid fa-cubes"></i><div><span>Products</span><strong>'+h(d.products)+'</strong><small>'+h(d.published_products)+' published</small></div></button>'+
+        '<button class="workspace-kpi" data-jump="licenses"><i class="fa-solid fa-key"></i><div><span>Licenses</span><strong>'+h(d.licenses)+'</strong><small>Active runtime licenses</small></div></button>'+
+        '<button class="workspace-kpi" data-jump="team"><i class="fa-solid fa-users"></i><div><span>Members</span><strong>'+h(d.members)+'</strong><small>Workspace team</small></div></button>'+
+        '<button class="workspace-kpi" data-jump="purchases"><i class="fa-solid fa-comments-dollar"></i><div><span>Open work</span><strong>'+h(Number(d.open_support||0)+Number(d.open_purchases||0))+'</strong><small>'+h(d.open_support)+' support · '+h(d.open_purchases)+' purchases</small></div></button>'+
+      '</section>'+
+      '<div class="workspace-overview-grid">'+
+        '<section class="panel workspace-main-panel">'+
+          '<div class="panel-head"><div><h2>Workspace operations</h2><p>Jump directly into the areas you use most.</p></div></div>'+
+          '<div class="workspace-quick-grid">'+
+            '<button data-jump="products"><i class="fa-solid fa-cubes"></i><span><strong>Products</strong><small>Catalog and publishing</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="releases"><i class="fa-solid fa-code-branch"></i><span><strong>Releases</strong><small>Versions and artifacts</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="protection"><i class="fa-solid fa-shield-halved"></i><span><strong>Protection</strong><small>Runtime security</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="integrations"><i class="fa-solid fa-plug"></i><span><strong>Integrations</strong><small>External services</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="docs"><i class="fa-solid fa-book-open"></i><span><strong>Docs & Website</strong><small>Documentation and pages</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+            '<button data-jump="infra"><i class="fa-solid fa-server"></i><span><strong>Infrastructure</strong><small>Nodes and API access</small></span><i class="fa-solid fa-chevron-right"></i></button>'+
+          '</div>'+
+        '</section>'+
+        '<aside class="workspace-overview-side">'+
+          '<section class="panel">'+
+            '<div class="panel-head"><div><h2>Workspace status</h2><p>Current boundary and access state.</p></div></div>'+
+            '<div class="workspace-status-list">'+
+              '<div><span>Role</span><strong>'+h(d.role)+'</strong></div>'+
+              '<div><span>Status</span><strong>'+h(d.workspace.status)+'</strong></div>'+
+              '<div><span>Published</span><strong>'+h(d.published_products)+' / '+h(d.products)+'</strong></div>'+
+              '<div><span>Members</span><strong>'+h(d.members)+'</strong></div>'+
+            '</div>'+
+          '</section>'+
+          '<section class="panel workspace-boundary-card">'+
+            '<div class="panel-body"><div class="workspace-boundary-icon"><i class="fa-solid fa-box"></i></div><h3>Scoped environment</h3><p>Products, releases, docs, integrations and audit stay isolated inside this workspace.</p></div>'+
+          '</section>'+
+        '</aside>'+
+      '</div>'+
+      (String(d.role)==='owner'?'<section class="panel danger-zone workspace-danger"><div class="panel-head"><div><h2>Danger zone</h2><p>Permanently delete this workspace and all scoped Forge data.</p></div><button class="btn danger" id="delete-workspace"><i class="fa-solid fa-trash"></i> Delete workspace</button></div></section>':'')+
+    '</div>'
+  );
+  document.querySelectorAll('[data-jump]').forEach(b=>b.onclick=()=>{state.view=b.dataset.jump;renderShell();loadView()});
+  if(document.querySelector('#delete-workspace'))document.querySelector('#delete-workspace').onclick=deleteCurrentWorkspace;
+  return;
+}
 if(state.view==='products'){setTitle('Products');const rows=await api('/workspaces/'+wid+'/products');content('<div class="hero"><div><h1>Products</h1><p>Create drafts, configure licensing and publish only after a release exists.</p></div><button class="btn primary" id="product-new">New product</button></div><div class="cards">'+(rows.length?rows.map(devProductCard).join(''):empty('fa-cubes','No products','Create the first product in this workspace.'))+'</div>');document.querySelector('#product-new').onclick=createProduct;document.querySelectorAll('[data-publish]').forEach(b=>b.onclick=()=>publishProduct(b.dataset.publish));return}
 if(state.view==='releases'){setTitle('Releases');const products=await api('/workspaces/'+wid+'/products');let all=[];for(const p of products){const rr=await api('/products/'+p.id+'/releases');rr.forEach(r=>all.push({...r,product_name:p.name,product_id:p.id}))}content('<div class="hero"><div><h1>Releases</h1><p>ZIP artifacts, changelogs and publication state.</p></div><button class="btn primary" id="release-new">Upload release</button></div><div class="panel">'+table(all,[['product_name','Product'],['version','Version'],['file_name','File'],['published','Published'],['created_at','Created']])+'</div>');document.querySelector('#release-new').onclick=()=>createRelease(products);return}
 if(state.view==='licenses'){setTitle('Workspace licenses');const rows=await api('/workspaces/'+wid+'/licenses');content('<div class="hero"><div><h1>Licenses</h1><p>Grant, revoke and limit runtime licenses.</p></div><button class="btn primary" id="license-new">Grant license</button></div><div class="panel">'+table(rows,[['product_name','Product'],['email','Customer'],['license_key','License key'],['server_limit','Servers'],['status','Status']])+'</div>');document.querySelector('#license-new').onclick=grantLicense;return}
