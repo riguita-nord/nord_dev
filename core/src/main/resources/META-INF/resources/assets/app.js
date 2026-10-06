@@ -539,7 +539,8 @@ function deleteCurrentProduct(p){
   const input=modalRoot.querySelector('#delete-product-confirm');
   const btn=modalRoot.querySelector('#delete-product-confirm-btn');
   const hint=modalRoot.querySelector('#delete-product-hint');
-  const matches=()=>input.value.trim()===String(p.name).trim();
+  const normalizeDeleteName=v=>String(v||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+  const matches=()=>normalizeDeleteName(input.value)===normalizeDeleteName(p.name);
 
   input.oninput=()=>{
     const ok=matches();
