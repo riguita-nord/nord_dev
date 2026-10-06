@@ -893,6 +893,149 @@ async function initNuiBuilder(p){
         },500);
       }
 
+      const setupAdminNavigation=()=>{
+        if(!selectedRoot)return;
+        const selectedKey=(selected||'').toLowerCase();
+        const rootKey=((selectedRoot.id||'')+' '+(selectedRoot.className||'')).toLowerCase();
+        if(!selectedKey.includes('admin')&&!rootKey.includes('admin'))return;
+
+        const normalize=value=>String(value||'')
+          .toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+          .replace(/[^a-z0-9]+/g,' ')
+          .trim();
+
+        const navScope=selectedRoot.querySelector('aside,nav,.sidebar,.side-nav,.menu,.navigation')||selectedRoot;
+        let navItems=[...navScope.querySelectorAll('button,a,[role="button"],[data-page],[data-view],[data-section]')]
+          .filter(el=>normalize(el.textContent).length>0)
+          .slice(0,20);
+
+        const mainScope=selectedRoot.querySelector('main,.content,.main-content,.page-content,.pages,.views')||selectedRoot;
+        let pages=[...mainScope.querySelectorAll(
+          '[data-page],[data-view],[data-section],.page,.view,.screen,.section,.tab-panel,[id$="Page"],[id$="View"],[id$="Panel"],[id*="page"],[id*="view"],[id*="panel"]'
+        )].filter(el=>{
+          if(el===selectedRoot||navScope.contains(el))return false;
+          const tag=el.tagName;
+          if(['BUTTON','A','NAV','ASIDE'].includes(tag))return false;
+          return true;
+        });
+
+        // Prefer top-level page containers over nested cards/widgets.
+        pages=pages.filter((el,idx,arr)=>!arr.some(other=>other!==el&&other.contains(el)));
+        pages=[...new Set(pages)].slice(0,20);
+
+        // Fallback: main direct children that look like independent admin pages.
+        if(pages.length<2){
+          const direct=[...mainScope.children].filter(el=>{
+            if(['SCRIPT','STYLE','HEADER','FOOTER'].includes(el.tagName))return false;
+            const key=normalize((el.id||'')+' '+(el.className||''));
+            return key.includes('dashboard')||key.includes('bancada')||key.includes('bench')||
+                   key.includes('receita')||key.includes('recipe')||key.includes('settings')||
+                   key.includes('config')||key.includes('page')||key.includes('view')||key.includes('panel');
+          });
+          if(direct.length>1)pages=direct.slice(0,20);
+        }
+
+        if(pages.length<2)return;
+
+        const pageKey=el=>normalize(
+          (el.getAttribute('data-page')||'')+' '+
+          (el.getAttribute('data-view')||'')+' '+
+          (el.getAttribute('data-section')||'')+' '+
+          (el.id||'')+' '+(el.className||'')+' '+
+          ((el.querySelector('h1,h2,h3,.title')||{}).textContent||'')
+        );
+
+        const activatePage=(page,clicked)=>{
+          pages.forEach(el=>{
+            const active=el===page;
+            el.style.setProperty('display',active?'block':'none','important');
+            if(active){
+              el.style.setProperty('visibility','visible','important');
+              el.style.setProperty('opacity','1','important');
+              el.hidden=false;
+            }
+          });
+          navItems.forEach(el=>{
+            el.classList.toggle('nord-preview-active',el===clicked);
+            if(el===clicked)el.setAttribute('aria-current','page');
+            else el.removeAttribute('aria-current');
+          });
+          setTimeout(()=>{reportBounds();fitSelected()},30);
+        };
+
+        const bestPageFor=item=>{
+          const token=normalize(
+            (item.getAttribute('data-page')||'')+' '+
+            (item.getAttribute('data-view')||'')+' '+
+            (item.getAttribute('data-section')||'')+' '+
+            item.textContent
+          );
+          if(!token)return null;
+          let best=null,bestScore=0;
+          pages.forEach(page=>{
+            const key=pageKey(page);
+            let score=0;
+            token.split(' ').filter(x=>x.length>2).forEach(word=>{
+              if(key.includes(word))score+=4;
+            });
+            key.split(' ').filter(x=>x.length>2).forEach(word=>{
+              if(token.includes(word))score+=2;
+            });
+            if(token.includes('dashboard')&&key.includes('dashboard'))score+=20;
+            if((token.includes('bancada')||token.includes('bench'))&&(key.includes('bancada')||key.includes('bench')))score+=20;
+            if((token.includes('receita')||token.includes('recipe'))&&(key.includes('receita')||key.includes('recipe')))score+=20;
+            if(score>bestScore){best=page;bestScore=score}
+          });
+          return bestScore>0?best:null;
+        };
+
+        let wired=0;
+        navItems.forEach(item=>{
+          const page=bestPageFor(item);
+          if(!page)return;
+          wired++;
+          item.style.cursor='pointer';
+          item.addEventListener('click',event=>{
+            event.preventDefault();
+            event.stopPropagation();
+            activatePage(page,item);
+          },true);
+        });
+
+        if(wired===0){
+          const helper=document.createElement('div');
+          helper.className='nord-preview-admin-nav';
+          pages.forEach((page,index)=>{
+            const btn=document.createElement('button');
+            const label=(page.getAttribute('data-page')||page.getAttribute('data-view')||page.id||
+              ((page.querySelector('h1,h2,h3,.title')||{}).textContent)||('Page '+(index+1)))
+              .replace(/[-_]+/g,' ');
+            btn.textContent=label;
+            btn.onclick=e=>{e.preventDefault();e.stopPropagation();activatePage(page,btn)};
+            helper.appendChild(btn);
+          });
+          selectedRoot.appendChild(helper);
+          navItems=[...helper.querySelectorAll('button')];
+        }
+
+        // Keep one page visible to avoid overlapping admin surfaces.
+        let initial=pages.find(page=>{
+          const key=pageKey(page);
+          return key.includes('dashboard');
+        })||pages[0];
+        let initialNav=navItems.find(item=>bestPageFor(item)===initial)||navItems[0]||null;
+        activatePage(initial,initialNav);
+
+        const style=document.createElement('style');
+        style.textContent=
+          '.nord-preview-active{background:rgba(113,92,255,.14)!important;color:inherit!important;}'+
+          '.nord-preview-admin-nav{position:absolute;left:10px;top:70px;z-index:2147483000;display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(10,13,20,.92)}'+
+          '.nord-preview-admin-nav button{border:0;border-radius:7px;padding:7px 9px;background:transparent;color:#fff;text-align:left;font:600 11px Arial;cursor:pointer}'+
+          '.nord-preview-admin-nav button:hover{background:rgba(113,92,255,.15)}';
+        document.head.appendChild(style);
+      };
+
       const fitSelected=()=>{
         const target=selectedRoot||document.body;
         if(!target)return;
@@ -915,14 +1058,14 @@ async function initNuiBuilder(p){
           }
           const vw=Math.max(1,window.innerWidth);
           const vh=Math.max(1,window.innerHeight);
-          const pad=28;
+          const pad=10;
 
           let scale=1;
           if(requestFit.enabled&&selectedRoot){
             scale=Math.min(
               (vw-(pad*2))/Math.max(1,r.width),
               (vh-(pad*2))/Math.max(1,r.height)
-            )*.94;
+            )*.985;
             scale=Math.max(.25,Math.min(scale,3.5));
           }else if(selectedRoot){
             scale=Math.max(.5,Math.min(Number(requestFit.zoom)||1,3.5));
@@ -990,9 +1133,9 @@ async function initNuiBuilder(p){
           viewportHeight:innerHeight
         },'*');
       };
-      setTimeout(()=>{reportBounds();fitSelected()},80);
-      setTimeout(()=>{reportBounds();fitSelected()},450);
-      setTimeout(()=>fitSelected(),900);
+      setTimeout(()=>{setupAdminNavigation();reportBounds();fitSelected()},80);
+      setTimeout(()=>{reportBounds();fitSelected()},360);
+      setTimeout(()=>fitSelected(),780);
       addEventListener('resize',()=>{reportBounds();fitSelected()});
     })();
   `;
