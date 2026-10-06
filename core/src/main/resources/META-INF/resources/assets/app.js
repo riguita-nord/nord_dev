@@ -4,7 +4,7 @@ const state={me:null,csrf:null,surface:localStorage.getItem('nf_surface')||'clie
 const I={client:[['home','fa-house','Home'],['products','fa-box-open','My Products'],['licenses','fa-key','Licenses'],['keymasters','fa-fingerprint','Keymasters'],['marketplace','fa-store','Marketplace'],['purchases','fa-receipt','Purchases'],['support','fa-headset','Support'],['account','fa-user-gear','Account']],dev:[['overview','fa-chart-line','Overview'],['products','fa-cubes','Products'],['purchases','fa-comments-dollar','Purchases'],['store','fa-shop','Store'],['docs','fa-book-open','Docs & Website'],['integrations','fa-plug','Integrations'],['team','fa-users','Team'],['infra','fa-server','Infrastructure'],['audit','fa-clock-rotate-left','Audit'],['settings','fa-gear','Settings']]};
 const h=v=>String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const money=(c,cur)=>new Intl.NumberFormat(undefined,{style:'currency',currency:cur||'EUR'}).format(Number(c||0)/100);
-async function api(path,opt){opt=opt||{};const headers={'Content-Type':'application/json',...(opt.headers||{})};if(state.csrf&&opt.method&&opt.method!=='GET')headers['X-CSRF-Token']=state.csrf;const r=await fetch('/api/v2'+path,{credentials:'same-origin',...opt,headers});if(r.status===401){state.me=null;renderAuth();throw new Error('unauthorized')}let data;try{data=await r.json()}catch(e){data={}}if(!r.ok)throw new Error(data.message||data.error||('HTTP '+r.status));return data}
+async function api(path,opt){opt=opt||{};const headers={'Content-Type':'application/json',...(opt.headers||{})};if(state.csrf&&opt.method&&opt.method!=='GET')headers['X-CSRF-Token']=state.csrf;const r=await fetch('/api/v2'+path,{credentials:'same-origin',...opt,headers});if(r.status===401){state.me=null;renderAuth();throw new Error('unauthorized')}const raw=await r.text();let data={};if(raw){try{data=JSON.parse(raw)}catch(e){data={message:raw}}}if(!r.ok)throw new Error(data.message||data.error||('HTTP '+r.status));return data}
 function toast(msg){let s=document.querySelector('.toast-stack');if(!s){s=document.createElement('div');s.className='toast-stack';document.body.appendChild(s)}const t=document.createElement('div');t.className='toast';t.textContent=msg;s.appendChild(t);setTimeout(()=>t.remove(),2800)}
 function modal(title,body,submit){modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><h2>'+h(title)+'</h2><button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body">'+body+'</div><div class="modal-foot"><button class="btn" data-close><i class="fa-solid fa-xmark"></i> Cancel</button><button class="btn primary" id="modal-save"><i class="fa-solid fa-check"></i> Save</button></div></div></div>';modalRoot.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>modalRoot.innerHTML='');document.querySelector('#modal-save').onclick=async()=>{try{await submit(new FormData(modalRoot.querySelector('form')));modalRoot.innerHTML=''}catch(e){toast(e.message)}}}
 function formVal(fd,k){return String(fd.get(k)||'').trim()}
@@ -824,9 +824,9 @@ function createProduct(){
     if(create)create.onclick=async()=>{
       create.disabled=true;
       create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product & release...';
-      let product=null;
       try{
-        product=await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({
+        const base64=await fileBase64(draft.release_file);
+        const result=await api('/workspaces/'+state.workspace.id+'/products/bootstrap',{method:'POST',body:JSON.stringify({
           name:draft.name.trim(),
           slug:draft.slug.trim(),
           category:draft.category,
@@ -834,26 +834,20 @@ function createProduct(){
           price_cents:Number(draft.price_cents)||0,
           currency:draft.currency,
           license_required:draft.protection_mode!=='NONE',
-          protection_mode:draft.protection_mode
+          protection_mode:draft.protection_mode,
+          release_version:draft.release_version.trim(),
+          release_file_name:draft.release_file.name,
+          release_file_base64:base64,
+          release_changelog:draft.release_changelog.trim()
         })});
-        const base64=await fileBase64(draft.release_file);
-        await api('/products/'+product.id+'/releases',{method:'POST',body:JSON.stringify({
-          version:draft.release_version.trim(),
-          file_name:draft.release_file.name,
-          file_base64:base64,
-          changelog:draft.release_changelog.trim(),
-          published:true
-        })});
+        const product=result.product;
         modalRoot.innerHTML='';
         state.productId=product.id;
         state.productTab='overview';
         state.view='products';
-        toast('Product and first release created');
+        toast(result.recovered?'Recovered draft and created first release':'Product and first release created');
         renderShell();loadView();
       }catch(e){
-        if(product&&product.id){
-          try{await api('/products/'+product.id,{method:'DELETE',body:'{}'})}catch(ignore){}
-        }
         toast(e.message);
         create.disabled=false;
         create.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Create product & release';
