@@ -537,8 +537,25 @@ function deleteCurrentProduct(p){
   modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><div><div class="side-kicker">Danger zone</div><h2>Delete '+h(p.name)+'</h2></div><button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body"><div class="notice">This permanently deletes the product, releases, licenses and protection data.</div><div class="field"><label>Type <b>'+h(p.name)+'</b> to confirm</label><input id="delete-product-confirm" autocomplete="off"></div></div><div class="modal-foot"><button class="btn" data-close>Cancel</button><button class="btn danger" id="delete-product-confirm-btn" disabled><i class="fa-solid fa-trash"></i> Delete permanently</button></div></div></div>';
   modalRoot.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>modalRoot.innerHTML='');
   const input=document.querySelector('#delete-product-confirm'),btn=document.querySelector('#delete-product-confirm-btn');
-  input.oninput=()=>btn.disabled=input.value!==p.name;
-  btn.onclick=async()=>{try{btn.disabled=true;await api('/products/'+p.id,{method:'DELETE',body:'{}'});modalRoot.innerHTML='';state.productId=null;state.productTab='overview';toast('Product deleted');loadView()}catch(e){toast(e.message);btn.disabled=false}};
+  const matches=()=>input.value.trim()===String(p.name).trim();
+  input.oninput=()=>btn.disabled=!matches();
+  input.onkeydown=e=>{if(e.key==='Enter'&&matches()){e.preventDefault();btn.click()}};
+  btn.onclick=async()=>{
+    try{
+      btn.disabled=true;
+      btn.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Deleting...';
+      await api('/products/'+p.id,{method:'DELETE',body:'{}'});
+      modalRoot.innerHTML='';
+      state.productId=null;
+      state.productTab='overview';
+      toast('Product deleted');
+      await loadView();
+    }catch(e){
+      toast(e.message);
+      btn.disabled=!matches();
+      btn.innerHTML='<i class="fa-solid fa-trash"></i> Delete permanently';
+    }
+  };
 }
 function createWorkspace(){
   const draft={step:1,name:'',slug:'',store_name:'',currency:'EUR',theme:state.theme==='light'?'light':'dark'};
