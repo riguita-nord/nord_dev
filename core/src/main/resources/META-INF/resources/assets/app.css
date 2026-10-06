@@ -2206,3 +2206,152 @@
     100%{left:calc(100% - 36px);opacity:0;transform:translateY(-50%) scale(.9)}
   }
 }
+
+/* Curved transfer path + persistent phase animation */
+.transfer-route{
+  position:relative;
+  height:96px!important;
+  display:block!important;
+  overflow:visible;
+}
+.transfer-line{display:none!important}
+.transfer-curve{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+.transfer-curve path{
+  fill:none;
+  vector-effect:non-scaling-stroke;
+}
+.transfer-curve-shadow{
+  stroke:color-mix(in srgb,var(--brand) 12%,transparent);
+  stroke-width:7;
+}
+.transfer-curve-main{
+  stroke:color-mix(in srgb,var(--brand) 68%,var(--line2));
+  stroke-width:2;
+  stroke-linecap:round;
+  stroke-dasharray:5 7;
+  animation:transferCurveFlow 1.25s linear infinite;
+}
+@keyframes transferCurveFlow{
+  to{stroke-dashoffset:-24}
+}
+.transfer-dots{
+  position:absolute!important;
+  inset:0!important;
+  pointer-events:none;
+}
+.transfer-dots span{
+  position:absolute;
+  margin:0!important;
+}
+.transfer-dots span:nth-child(1){
+  left:24%;
+  top:45%;
+}
+.transfer-dots span:nth-child(2){
+  left:49%;
+  top:17%;
+}
+.transfer-dots span:nth-child(3){
+  left:74%;
+  top:45%;
+}
+.transfer-file{
+  top:auto!important;
+  left:0!important;
+  bottom:4px;
+  transform:none!important;
+  animation:transferFileParabola 2.7s cubic-bezier(.44,.02,.22,1) infinite!important;
+  will-change:left,bottom,transform,opacity;
+}
+@keyframes transferFileParabola{
+  0%{
+    left:0;
+    bottom:4px;
+    opacity:0;
+    transform:scale(.84) rotate(-4deg);
+  }
+  8%{
+    opacity:1;
+  }
+  25%{
+    left:24%;
+    bottom:35px;
+    transform:scale(.94) rotate(-2deg);
+  }
+  50%{
+    left:calc(50% - 21px);
+    bottom:58px;
+    opacity:1;
+    transform:scale(1.08) rotate(2deg);
+  }
+  75%{
+    left:72%;
+    bottom:35px;
+    transform:scale(.98) rotate(1deg);
+  }
+  92%{
+    opacity:1;
+  }
+  100%{
+    left:calc(100% - 42px);
+    bottom:4px;
+    opacity:0;
+    transform:scale(.88) rotate(0deg);
+  }
+}
+.upload-transfer-visual.success .transfer-file{
+  animation:none!important;
+  left:calc(100% - 42px)!important;
+  bottom:4px!important;
+  opacity:1!important;
+  transform:scale(1)!important;
+}
+.upload-transfer-visual.error .transfer-file{
+  animation:none!important;
+  left:calc(50% - 21px)!important;
+  bottom:58px!important;
+  opacity:1!important;
+  transform:scale(1)!important;
+}
+.product-processing-modal,
+.upload-transfer-visual,
+.product-processing-copy,
+.product-processing-progress,
+.product-processing-steps,
+.transfer-node-icon{
+  transition:
+    border-color .22s ease,
+    background-color .22s ease,
+    color .22s ease,
+    box-shadow .22s ease,
+    opacity .22s ease;
+}
+.product-processing-modal h2{
+  transition:color .18s ease;
+}
+.product-processing-error[hidden],
+#processing-back[hidden]{
+  display:none!important;
+}
+
+@media(max-width:620px){
+  .transfer-route{height:82px!important}
+  .transfer-dots span:nth-child(1){top:46%}
+  .transfer-dots span:nth-child(2){top:15%}
+  .transfer-dots span:nth-child(3){top:46%}
+  @keyframes transferFileParabola{
+    0%{left:0;bottom:3px;opacity:0;transform:scale(.84)}
+    8%{opacity:1}
+    25%{left:23%;bottom:29px}
+    50%{left:calc(50% - 18px);bottom:48px;opacity:1;transform:scale(1.06)}
+    75%{left:72%;bottom:29px}
+    92%{opacity:1}
+    100%{left:calc(100% - 36px);bottom:3px;opacity:0;transform:scale(.9)}
+  }
+}
