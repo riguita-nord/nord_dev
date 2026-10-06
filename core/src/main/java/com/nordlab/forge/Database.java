@@ -57,7 +57,17 @@ public class Database {
                 ResultSetMetaData md=rs.getMetaData();
                 while(rs.next()) {
                     Map<String,Object> row=new LinkedHashMap<>();
-                    for(int i=1;i<=md.getColumnCount();i++) row.put(md.getColumnLabel(i).toLowerCase(Locale.ROOT), rs.getObject(i));
+                    for(int i=1;i<=md.getColumnCount();i++){
+                        Object value=rs.getObject(i);
+                        if(value instanceof Clob clob){
+                            value=clob.getSubString(1,(int)clob.length());
+                        }else if(value instanceof Blob blob){
+                            value=blob.getBytes(1,(int)blob.length());
+                        }else if(value instanceof SQLXML xml){
+                            value=xml.getString();
+                        }
+                        row.put(md.getColumnLabel(i).toLowerCase(Locale.ROOT),value);
+                    }
                     out.add(row);
                 }
                 return out;
