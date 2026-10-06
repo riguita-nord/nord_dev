@@ -382,6 +382,8 @@ public class CoreResource {
         out.put("active_licenses",db.count("SELECT COUNT(*) FROM licenses WHERE product_id=? AND status='active'",pid));
         out.put("active_installations",db.count("SELECT COUNT(*) FROM protection_installations WHERE product_id=? AND status='active'",pid));
         out.put("purchases",db.count("SELECT COUNT(*) FROM purchase_threads WHERE product_id=?",pid));
+        Map<String,Object> nuiProject=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
+        out.put("nui_project",nuiProject==null?Map.of():nuiProject);
         return ok(out);
     }
 
