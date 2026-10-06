@@ -508,7 +508,7 @@ function renderProductWorkspace(d){
     body=
       '<div class="nui-builder" id="nui-builder">'+
         '<header class="nui-builder-toolbar">'+
-          '<div class="nui-builder-title"><div class="nui-builder-mark"><i class="fa-solid fa-pen-ruler"></i></div><div><strong>NUI Builder</strong><span>Visual workspace for '+h(p.name)+'</span></div></div>'+
+          '<div class="nui-builder-title"><div class="nui-builder-mark"><i class="fa-solid fa-pen-ruler"></i></div><div><strong>NUI Builder</strong><span id="nui-builder-source">Visual workspace for '+h(p.name)+'</span></div></div>'+
           '<div class="nui-builder-toolbar-center">'+
             '<button class="nui-view-btn active" data-nui-view="desktop" title="Desktop"><i class="fa-solid fa-desktop"></i></button>'+
             '<button class="nui-view-btn" data-nui-view="tablet" title="Tablet"><i class="fa-solid fa-tablet-screen-button"></i></button>'+
@@ -618,6 +618,18 @@ async function initNuiBuilder(p){
   html.value=project.html||'';
   css.value=project.css||'';
   js.value=project.js||'';
+  const sourceLabel=document.querySelector('#nui-builder-source');
+  if(project.source==='release'){
+    const release=project.release_version?'v'+project.release_version:'release';
+    const entry=project.source_entry||project.release_file_name||'NUI';
+    if(sourceLabel)sourceLabel.textContent='Imported from '+release+' · '+entry;
+    if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-box-archive"></i> NUI detected in release';
+    toast('Existing NUI detected and loaded from release');
+  }else if(project.source==='saved'){
+    if(sourceLabel)sourceLabel.textContent='Saved NUI project for '+p.name;
+  }else{
+    if(sourceLabel)sourceLabel.textContent='New visual workspace for '+p.name;
+  }
   let settings={viewport:'desktop',background:'transparent'};
   try{settings={...settings,...JSON.parse(project.settings_json||'{}')}}catch(e){}
 
@@ -700,7 +712,7 @@ async function initNuiBuilder(p){
     }
   };
 
-  if(stateLabel)stateLabel.innerHTML='<i class="fa-solid fa-circle-check"></i> Project loaded';
+  if(stateLabel && project.source!=='release')stateLabel.innerHTML='<i class="fa-solid fa-circle-check"></i> Project loaded';
   renderPreview();
 }
 
