@@ -4161,3 +4161,26 @@
     border-top:1px solid var(--line)!important;
   }
 }
+
+/* Universal NUI preview surface — no transparency checkerboard */
+.nui-builder-preview-area{
+  background:var(--panel3)!important;
+}
+.nui-preview-stage,
+.nui-preview-stage.desktop,
+.nui-preview-stage.tablet,
+.nui-preview-stage.mobile{
+  background:#10151d!important;
+}
+.nui-preview-stage>iframe{
+  background:#10151d!important;
+}
+[data-theme="light"] .nui-builder-preview-area{
+  background:#dbe1e9!important;
+}
+[data-theme="light"] .nui-preview-stage,
+[data-theme="light"] .nui-preview-stage.desktop,
+[data-theme="light"] .nui-preview-stage.tablet,
+[data-theme="light"] .nui-preview-stage.mobile{
+  background:#171c24!important;
+}
