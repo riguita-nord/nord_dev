@@ -184,6 +184,93 @@ public class CoreResource {
             wid,name,forge.slug(forge.text(b,"slug").isBlank()?name:forge.text(b,"slug")),forge.text(b,"description"),forge.text(b,"category"),forge.longValue(b,"price_cents",0),forge.text(b,"currency").isBlank()?"EUR":forge.text(b,"currency"),forge.bool(b,"license_required",true),forge.text(b,"protection_mode").isBlank()?"LICENSE_ONLY":forge.text(b,"protection_mode"),"draft");
         forge.audit(wid,actor,"product.created",String.valueOf(pid),name); return ok(db.one("SELECT * FROM products WHERE id=?",pid));
     }
+    @POST @Path("/workspaces/{wid}/products/bootstrap")
+    public Response bootstrapProduct(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session,@HeaderParam("X-CSRF-Token") String csrf,Map<String,Object> b){
+        unsafe(session,csrf);
+        long actor=uid(session);
+        forge.requireWorkspace(actor,wid,"developer","admin");
+        b=body(b);
+
+        String name=forge.text(b,"name");
+        if(name.length()<2) throw new BadRequestException("product_name_required");
+
+        String slug=forge.slug(forge.text(b,"slug").isBlank()?name:forge.text(b,"slug"));
+        if(slug.length()<2) throw new BadRequestException("product_slug_required");
+
+        String version=forge.text(b,"release_version");
+        String fileName=forge.text(b,"release_file_name");
+        String fileBase64=forge.text(b,"release_file_base64");
+        if(version.isBlank()) throw new BadRequestException("release_version_required");
+        if(fileName.isBlank()||!fileName.toLowerCase(Locale.ROOT).endsWith(".zip")) throw new BadRequestException("release_zip_required");
+        if(fileBase64.isBlank()) throw new BadRequestException("release_file_required");
+
+        Map<String,Object> existing=db.one("SELECT * FROM products WHERE workspace_id=? AND slug=?",wid,slug);
+        Long pid=null;
+        boolean reused=false;
+        String storagePath=null;
+
+        try{
+            if(existing!=null){
+                long existingId=((Number)existing.get("id")).longValue();
+                long releaseCount=db.count("SELECT COUNT(*) FROM releases WHERE product_id=?",existingId);
+                if(!"draft".equals(String.valueOf(existing.get("status"))) || releaseCount>0)
+                    throw new BadRequestException("product_slug_taken");
+
+                pid=existingId;
+                reused=true;
+                db.execute("UPDATE products SET name=?,description=?,category=?,price_cents=?,currency=?,license_required=?,protection_mode=? WHERE id=?",
+                    name,
+                    forge.text(b,"description"),
+                    forge.text(b,"category"),
+                    forge.longValue(b,"price_cents",0),
+                    forge.text(b,"currency").isBlank()?"EUR":forge.text(b,"currency"),
+                    forge.bool(b,"license_required",true),
+                    forge.text(b,"protection_mode").isBlank()?"LICENSE_ONLY":forge.text(b,"protection_mode"),
+                    pid);
+            }else{
+                pid=db.insert("INSERT INTO products(workspace_id,name,slug,description,category,price_cents,currency,license_required,protection_mode,status) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    wid,
+                    name,
+                    slug,
+                    forge.text(b,"description"),
+                    forge.text(b,"category"),
+                    forge.longValue(b,"price_cents",0),
+                    forge.text(b,"currency").isBlank()?"EUR":forge.text(b,"currency"),
+                    forge.bool(b,"license_required",true),
+                    forge.text(b,"protection_mode").isBlank()?"LICENSE_ONLY":forge.text(b,"protection_mode"),
+                    "draft");
+            }
+
+            storagePath=storage.saveRelease(wid,pid,version,fileName,fileBase64);
+            long rid=db.insert("INSERT INTO releases(product_id,version,changelog,file_name,storage_path,published) VALUES(?,?,?,?,?,TRUE)",
+                pid,version,forge.text(b,"release_changelog"),fileName,storagePath);
+
+            forge.audit(wid,actor,reused?"product.recovered":"product.created",String.valueOf(pid),name);
+            forge.audit(wid,actor,"release.created",String.valueOf(rid),version);
+
+            Map<String,Object> out=new LinkedHashMap<>();
+            out.put("ok",true);
+            out.put("product",db.one("SELECT * FROM products WHERE id=?",pid));
+            out.put("release",db.one("SELECT id,product_id,version,changelog,file_name,published,created_at FROM releases WHERE id=?",rid));
+            out.put("recovered",reused);
+            return ok(out);
+        }catch(WebApplicationException e){
+            if(storagePath!=null) storage.delete(storagePath);
+            if(pid!=null && !reused){
+                db.execute("DELETE FROM releases WHERE product_id=?",pid);
+                db.execute("DELETE FROM products WHERE id=?",pid);
+            }
+            throw e;
+        }catch(Exception e){
+            if(storagePath!=null) storage.delete(storagePath);
+            if(pid!=null && !reused){
+                db.execute("DELETE FROM releases WHERE product_id=?",pid);
+                db.execute("DELETE FROM products WHERE id=?",pid);
+            }
+            throw new InternalServerErrorException("product_bootstrap_failed: "+e.getMessage(),e);
+        }
+    }
+
     @GET @Path("/products/{pid}/workspace")
     public Response productWorkspace(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session){
         Map<String,Object> product=db.one("SELECT * FROM products WHERE id=?",pid);
