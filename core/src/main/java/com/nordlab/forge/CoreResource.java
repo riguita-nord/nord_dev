@@ -101,6 +101,11 @@ public class CoreResource {
         String confirmation=forge.text(b,"confirmation");
         if(!String.valueOf(w.get("name")).equals(confirmation)) throw new BadRequestException("workspace_confirmation_mismatch");
 
+        for(Map<String,Object> file:db.query("SELECT r.storage_path FROM releases r JOIN products p ON p.id=r.product_id WHERE p.workspace_id=?",wid))
+            storage.delete(String.valueOf(file.get("storage_path")));
+        for(Map<String,Object> file:db.query("SELECT pm.storage_path FROM protection_modules pm JOIN protection_builds pb ON pb.build_id=pm.build_id WHERE pb.workspace_id=?",wid))
+            storage.delete(String.valueOf(file.get("storage_path")));
+
         db.execute("DELETE FROM protection_modules WHERE build_id IN(SELECT build_id FROM protection_builds WHERE workspace_id=?)",wid);
         db.execute("DELETE FROM protection_sessions WHERE build_id IN(SELECT build_id FROM protection_builds WHERE workspace_id=?)",wid);
         db.execute("DELETE FROM protection_installations WHERE workspace_id=?",wid);
