@@ -8,7 +8,52 @@ async function api(path,opt){opt=opt||{};const headers={'Content-Type':'applicat
 function toast(msg){let s=document.querySelector('.toast-stack');if(!s){s=document.createElement('div');s.className='toast-stack';document.body.appendChild(s)}const t=document.createElement('div');t.className='toast';t.textContent=msg;s.appendChild(t);setTimeout(()=>t.remove(),2800)}
 function modal(title,body,submit){modalRoot.innerHTML='<div class="modal-layer"><div class="modal-card"><div class="modal-head"><h2>'+h(title)+'</h2><button class="icon-btn" data-close><i class="fa-solid fa-xmark"></i></button></div><div class="modal-body">'+body+'</div><div class="modal-foot"><button class="btn" data-close><i class="fa-solid fa-xmark"></i> Cancel</button><button class="btn primary" id="modal-save"><i class="fa-solid fa-check"></i> Save</button></div></div></div>';modalRoot.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>modalRoot.innerHTML='');document.querySelector('#modal-save').onclick=async()=>{try{await submit(new FormData(modalRoot.querySelector('form')));modalRoot.innerHTML=''}catch(e){toast(e.message)}}}
 function formVal(fd,k){return String(fd.get(k)||'').trim()}
-async function boot(){document.documentElement.dataset.theme=state.theme;try{const setup=await api('/setup/status');if(setup.needs_setup){renderSetup();return}const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();renderShell();loadView()}catch(e){if(!state.me)renderAuth()}}
+async function boot(){
+  document.documentElement.dataset.theme=state.theme;
+  renderBootSplash();
+  const started=Date.now();
+  try{
+    setBootStatus('Checking Forge runtime','fa-microchip');
+    const setup=await api('/setup/status');
+    setBootStatus(setup.needs_setup?'Preparing initial setup':'Loading your workspace',setup.needs_setup?'fa-wand-magic-sparkles':'fa-layer-group');
+    const wait=Math.max(0,1350-(Date.now()-started));
+    if(wait)await new Promise(r=>setTimeout(r,wait));
+    await dismissBootSplash();
+    if(setup.needs_setup){renderSetup();return}
+    const m=await api('/me');state.me=m.user;state.csrf=m.csrf;await loadWorkspaces();renderShell();loadView()
+  }catch(e){
+    const wait=Math.max(0,900-(Date.now()-started));if(wait)await new Promise(r=>setTimeout(r,wait));
+    await dismissBootSplash();
+    if(!state.me)renderAuth()
+  }
+}
+function renderBootSplash(){
+  app.innerHTML='<div class="nord-boot" id="nord-boot">'+
+    '<div class="nord-boot-noise"></div>'+
+    '<div class="nord-boot-center">'+
+      '<div class="nord-boot-mark"><div class="nord-boot-mark-inner"><i class="fa-solid fa-cube"></i></div><span class="nord-boot-pulse"></span></div>'+
+      '<div class="nord-boot-brand"><strong>NORD</strong><span>FORGE</span></div>'+
+      '<div class="nord-boot-version">Developer Platform · V2</div>'+
+      '<div class="nord-boot-loader"><span></span></div>'+
+      '<div class="nord-boot-status" id="nord-boot-status"><i class="fa-solid fa-bolt"></i><span>Starting Nord Forge</span></div>'+
+    '</div>'+
+    '<div class="nord-boot-foot"><span>nord-lab</span><span class="nord-boot-dot"></span><span>secure runtime</span></div>'+
+  '</div>';
+}
+function setBootStatus(label,icon){
+  const el=document.querySelector('#nord-boot-status');
+  if(!el)return;
+  el.classList.remove('swap');void el.offsetWidth;el.classList.add('swap');
+  el.innerHTML='<i class="fa-solid '+icon+'"></i><span>'+h(label)+'</span>';
+}
+function dismissBootSplash(){
+  return new Promise(resolve=>{
+    const el=document.querySelector('#nord-boot');
+    if(!el){resolve();return}
+    el.classList.add('leaving');
+    setTimeout(resolve,520);
+  });
+}
 function renderAuth(){app.innerHTML='<div class="auth-page"><section class="auth-pane"><div class="auth-card"><div class="auth-brand"><div class="rail-mark"><i class="fa-solid fa-code"></i></div><div><b>Nord Forge</b><div class="side-kicker">Developer Platform V2</div></div></div><h1>Welcome back.</h1><p>Sign in to your Client Area or Developer Studio.</p><div class="auth-tabs"><button class="active" data-auth="login"><i class="fa-solid fa-right-to-bracket"></i> Sign in</button><button data-auth="register"><i class="fa-solid fa-user-plus"></i> Register</button></div><div id="auth-form"></div></div></section><section class="auth-art"><div class="auth-art-icon"><i class="fa-solid fa-cubes"></i></div><div class="side-kicker">Nord Forge V2</div><h2>Build, ship and manage your ecosystem.</h2><p>Client Area, Developer Studio and isolated Administration stay separated while products, licensing, releases and support remain connected.</p></section></div>';document.querySelectorAll('[data-auth]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-auth]').forEach(x=>x.classList.toggle('active',x===b));authForm(b.dataset.auth)});authForm('login')}
 function authForm(mode){const host=document.querySelector('#auth-form');host.innerHTML='<form class="form">'+(mode==='register'?'<div class="field"><label><i class="fa-solid fa-user"></i> Display name</label><div class="input-icon"><i class="fa-solid fa-user"></i><input name="display_name" autocomplete="name" required></div></div>':'')+'<div class="field"><label><i class="fa-solid fa-envelope"></i> Email</label><div class="input-icon"><i class="fa-solid fa-envelope"></i><input name="email" type="email" autocomplete="email" required></div></div><div class="field"><label><i class="fa-solid fa-lock"></i> Password</label><div class="input-icon"><i class="fa-solid fa-lock"></i><input name="password" type="password" minlength="10" autocomplete="'+(mode==='login'?'current-password':'new-password')+'" required></div></div><button class="btn primary auth-submit" type="submit"><i class="fa-solid '+(mode==='login'?'fa-right-to-bracket':'fa-user-plus')+'"></i> '+(mode==='login'?'Sign in':'Create account')+'</button></form>';host.querySelector('form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{const d=await api('/auth/'+mode,{method:'POST',body:JSON.stringify({email:formVal(fd,'email'),password:formVal(fd,'password'),display_name:formVal(fd,'display_name')})});state.me=d.user;state.csrf=d.csrf;await loadWorkspaces();renderShell();loadView()}catch(err){toast(err.message)}}}
 function renderSetup(){
