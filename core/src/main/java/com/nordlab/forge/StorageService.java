@@ -9,7 +9,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
-import java.util.zip.ZipInputStream;
+import java.util.zip.*;
+import java.util.regex.*;
 
 @ApplicationScoped
 public class StorageService {
@@ -120,6 +121,159 @@ public class StorageService {
             Files.write(out,data,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING);
             return out.toAbsolutePath().toString();
         }catch(IOException e){throw new IllegalStateException("release_storage_failed",e);}
+    }
+
+    public Map<String,Object> importNuiFromRelease(String zipPath){
+        if(zipPath==null||zipPath.isBlank()) return Map.of();
+        Path rootPath=Path.of(root).toAbsolutePath().normalize();
+        Path archive=Path.of(zipPath).toAbsolutePath().normalize();
+        if(!archive.startsWith(rootPath)||!Files.isRegularFile(archive)) return Map.of();
+
+        try(ZipFile zip=new ZipFile(archive.toFile())){
+            Map<String,ZipEntry> entries=new LinkedHashMap<>();
+            zip.stream()
+                .filter(e->!e.isDirectory())
+                .forEach(e->entries.put(normalizeZipName(e.getName()).toLowerCase(Locale.ROOT),e));
+
+            ZipEntry manifest=entries.values().stream()
+                .filter(e->{
+                    String n=normalizeZipName(e.getName()).toLowerCase(Locale.ROOT);
+                    return n.endsWith("/fxmanifest.lua")||n.equals("fxmanifest.lua")||n.endsWith("/__resource.lua")||n.equals("__resource.lua");
+                })
+                .min(Comparator.comparingInt(e->normalizeZipName(e.getName()).length()))
+                .orElse(null);
+
+            String htmlPath=null;
+            if(manifest!=null){
+                String manifestText=readZipText(zip,manifest,2*1024*1024);
+                Matcher ui=Pattern.compile("(?im)^\\s*ui_page\\s*[('\\\"]*([^'\\\"\\)\\r\\n]+)").matcher(manifestText);
+                if(ui.find()){
+                    String ref=ui.group(1).trim();
+                    htmlPath=resolveZipReference(parentZipPath(normalizeZipName(manifest.getName())),ref);
+                }
+            }
+
+            if(htmlPath==null||!entries.containsKey(htmlPath.toLowerCase(Locale.ROOT))){
+                htmlPath=entries.values().stream()
+                    .map(e->normalizeZipName(e.getName()))
+                    .filter(n->{
+                        String low=n.toLowerCase(Locale.ROOT);
+                        return low.endsWith("/index.html")||low.equals("index.html");
+                    })
+                    .filter(n->{
+                        String low=n.toLowerCase(Locale.ROOT);
+                        return low.contains("/html/")||low.startsWith("html/")||
+                               low.contains("/web/")||low.startsWith("web/")||
+                               low.contains("/ui/")||low.startsWith("ui/")||
+                               low.contains("/nui/")||low.startsWith("nui/")||
+                               low.contains("/dist/")||low.startsWith("dist/")||
+                               !low.contains("/");
+                    })
+                    .min(Comparator.comparingInt(String::length))
+                    .orElse(null);
+            }
+
+            if(htmlPath==null) return Map.of();
+            ZipEntry htmlEntry=entries.get(htmlPath.toLowerCase(Locale.ROOT));
+            if(htmlEntry==null) return Map.of();
+
+            String html=readZipText(zip,htmlEntry,6*1024*1024);
+            String htmlBase=parentZipPath(htmlPath);
+            StringBuilder css=new StringBuilder();
+            StringBuilder js=new StringBuilder();
+
+            Pattern cssPattern=Pattern.compile("(?is)<link\\b[^>]*rel=[\\\"']?stylesheet[\\\"']?[^>]*href=[\\\"']([^\\\"']+)[\\\"'][^>]*>");
+            Matcher cssMatcher=cssPattern.matcher(html);
+            StringBuffer cleanedHtml=new StringBuffer();
+            while(cssMatcher.find()){
+                String ref=cssMatcher.group(1).trim();
+                if(isLocalAsset(ref)){
+                    String resolved=resolveZipReference(htmlBase,ref);
+                    ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
+                    if(asset!=null){
+                        css.append("/* ").append(resolved).append(" */\\n")
+                           .append(readZipText(zip,asset,8*1024*1024)).append("\\n\\n");
+                        cssMatcher.appendReplacement(cleanedHtml,"");
+                        continue;
+                    }
+                }
+                cssMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(cssMatcher.group()));
+            }
+            cssMatcher.appendTail(cleanedHtml);
+            html=cleanedHtml.toString();
+
+            Pattern scriptPattern=Pattern.compile("(?is)<script\\b([^>]*)src=[\\\"']([^\\\"']+)[\\\"']([^>]*)>\\s*</script>");
+            Matcher scriptMatcher=scriptPattern.matcher(html);
+            cleanedHtml=new StringBuffer();
+            while(scriptMatcher.find()){
+                String ref=scriptMatcher.group(2).trim();
+                if(isLocalAsset(ref)){
+                    String resolved=resolveZipReference(htmlBase,ref);
+                    ZipEntry asset=entries.get(resolved.toLowerCase(Locale.ROOT));
+                    if(asset!=null){
+                        js.append("/* ").append(resolved).append(" */\\n")
+                          .append(readZipText(zip,asset,12*1024*1024)).append("\\n\\n");
+                        scriptMatcher.appendReplacement(cleanedHtml,"");
+                        continue;
+                    }
+                }
+                scriptMatcher.appendReplacement(cleanedHtml,Matcher.quoteReplacement(scriptMatcher.group()));
+            }
+            scriptMatcher.appendTail(cleanedHtml);
+            html=cleanedHtml.toString();
+
+            Map<String,Object> out=new LinkedHashMap<>();
+            out.put("html",html);
+            out.put("css",css.toString());
+            out.put("js",js.toString());
+            out.put("settings_json","{\"viewport\":\"desktop\",\"background\":\"transparent\"}");
+            out.put("source","release");
+            out.put("source_entry",htmlPath);
+            out.put("detected",true);
+            return out;
+        }catch(IOException e){
+            throw new IllegalStateException("nui_release_import_failed",e);
+        }
+    }
+
+    private String readZipText(ZipFile zip,ZipEntry entry,int maxBytes)throws IOException{
+        if(entry.getSize()>maxBytes) throw new IOException("zip_entry_too_large");
+        try(InputStream in=zip.getInputStream(entry); ByteArrayOutputStream out=new ByteArrayOutputStream()){
+            byte[] buf=new byte[64*1024];
+            int total=0,read;
+            while((read=in.read(buf))!=-1){
+                total+=read;
+                if(total>maxBytes) throw new IOException("zip_entry_too_large");
+                out.write(buf,0,read);
+            }
+            return out.toString(java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    private String normalizeZipName(String value){
+        return value==null?"":value.replace('\\','/').replaceAll("^\\./+","");
+    }
+
+    private String parentZipPath(String value){
+        String n=normalizeZipName(value);
+        int slash=n.lastIndexOf('/');
+        return slash<0?"":n.substring(0,slash+1);
+    }
+
+    private String resolveZipReference(String base,String ref){
+        String cleaned=ref==null?"":ref.trim().replace('\\','/');
+        while(cleaned.startsWith("./")) cleaned=cleaned.substring(2);
+        if(cleaned.startsWith("/")) cleaned=cleaned.substring(1);
+        Path resolved=Path.of(base==null?"":base).resolve(cleaned).normalize();
+        String out=resolved.toString().replace('\\','/');
+        while(out.startsWith("../")) out=out.substring(3);
+        return normalizeZipName(out);
+    }
+
+    private boolean isLocalAsset(String ref){
+        if(ref==null||ref.isBlank()) return false;
+        String low=ref.trim().toLowerCase(Locale.ROOT);
+        return !low.startsWith("http://")&&!low.startsWith("https://")&&!low.startsWith("//")&&!low.startsWith("data:")&&!low.startsWith("nui://")&&!low.startsWith("https://cfx-nui-");
     }
 
     private WebApplicationException validation(String code){
