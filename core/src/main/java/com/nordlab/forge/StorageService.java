@@ -616,12 +616,82 @@ public class StorageService {
               }
               return nativeFetch ? nativeFetch(input, init) : Promise.resolve(new Response('{}',{status:200}));
             };
+            const labelFor = (el, i) => {
+              const id = (el.id || '').trim();
+              if (id) return id.replace(/[-_]+/g, ' ');
+              const cls = [...(el.classList || [])].find(x => !['app','root','container','wrapper','main','content','ui','hidden','hide'].includes(String(x).toLowerCase()));
+              return cls ? cls.replace(/[-_]+/g, ' ') : 'Interface ' + (i + 1);
+            };
+            const keyFor = (el, i) => {
+              const raw = (el.id || [...(el.classList || [])][0] || ('interface-' + i));
+              return String(raw).replace(/[^A-Za-z0-9_-]/g, '-') || ('interface-' + i);
+            };
+            const runtimeInterfaces = () => {
+              const valid = el => el && !['SCRIPT','STYLE','LINK','META','TITLE','TEMPLATE','NOSCRIPT'].includes(el.tagName);
+              let items = [...document.body.children].filter(valid);
+              if (items.length === 1) {
+                const root = items[0];
+                const children = [...root.children].filter(valid);
+                if (children.length > 1) items = children;
+              }
+              if (!items.length) items = [document.body];
+              items = [...new Set(items)].slice(0, 16);
+              items.forEach((el, i) => el.setAttribute('data-nord-live-interface', keyFor(el, i)));
+              const payload = items.map((el, i) => ({
+                id: el.getAttribute('data-nord-live-interface'),
+                name: labelFor(el, i)
+              }));
+              parent.postMessage({ type:'nord-live-interfaces', items:payload }, '*');
+              return items;
+            };
+            const forceInterface = id => {
+              const items = runtimeInterfaces();
+              if (!id || id === 'all') return;
+              const selected = items.find(el => el.getAttribute('data-nord-live-interface') === id);
+              if (!selected) return;
+              const chain = new Set();
+              let cur = selected;
+              while (cur && cur !== document.body) { chain.add(cur); cur = cur.parentElement; }
+              [...chain].forEach(el => {
+                el.hidden = false;
+                el.classList.remove('hidden','hide','d-none');
+                el.style.setProperty('display','block','important');
+                el.style.setProperty('visibility','visible','important');
+                el.style.setProperty('opacity','1','important');
+              });
+              items.forEach(el => {
+                if (el !== selected && !el.contains(selected) && !selected.contains(el)) {
+                  el.style.setProperty('display','none','important');
+                }
+              });
+            };
             window.addEventListener('message', (event) => {
               const data = event.data || {};
               if (data && data.__nordRuntimePayload) {
                 window.dispatchEvent(new MessageEvent('message', { data: data.payload }));
+                return;
+              }
+              if (data.type === 'nord-live-scan') {
+                runtimeInterfaces();
+                return;
+              }
+              if (data.type === 'nord-live-force-interface') {
+                forceInterface(data.id);
               }
             });
+            const bootScan = () => {
+              try { runtimeInterfaces(); } catch (_) {}
+            };
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(bootScan, 80);
+                setTimeout(bootScan, 500);
+                setTimeout(bootScan, 1200);
+              }, { once:true });
+            } else {
+              setTimeout(bootScan, 80);
+              setTimeout(bootScan, 500);
+            }
             window.addEventListener('error', e => {
               try { parent.postMessage({type:'nord-live-preview-error',message:String(e.message||'Preview error')}, '*'); } catch (_) {}
             });
