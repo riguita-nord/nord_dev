@@ -76,3 +76,152 @@
   .setup-actions{padding:0 12px}
   .setup-btn{font-size:9px;padding:0 11px}
 }
+
+/* Motion polish — smoother Nord transitions */
+:root{
+  --ease-smooth:cubic-bezier(.22,.8,.24,1);
+  --ease-soft:cubic-bezier(.16,1,.3,1);
+  --ease-standard:cubic-bezier(.4,0,.2,1);
+}
+.nord-boot{
+  transition:
+    opacity .62s var(--ease-soft),
+    transform .62s var(--ease-soft),
+    filter .62s var(--ease-soft);
+  will-change:opacity,transform,filter;
+}
+.nord-boot.leaving{
+  opacity:0;
+  transform:scale(1.012);
+  filter:brightness(.94);
+}
+.nord-boot-mark-inner{
+  animation:nordBootFloat 4.8s var(--ease-smooth) infinite;
+  will-change:transform;
+}
+.nord-boot-pulse{
+  animation:nordPulse 2.8s var(--ease-standard) infinite;
+  will-change:transform,opacity;
+}
+.nord-boot-loader span{
+  width:44%;
+  animation:nordLoad 1.6s var(--ease-standard) infinite;
+  will-change:transform;
+}
+.nord-boot-status{
+  transition:opacity .28s var(--ease-standard),transform .28s var(--ease-standard);
+  will-change:opacity,transform;
+}
+.nord-boot-status.swap{
+  animation:statusSwap .46s var(--ease-soft);
+}
+.setup-shell{
+  animation:setupEnter .78s var(--ease-soft);
+  will-change:opacity,transform;
+}
+.setup-step{
+  animation:setupStepIn .52s var(--ease-soft);
+  will-change:opacity,transform;
+}
+.setup-progress span{
+  transition:
+    background-color .45s var(--ease-standard),
+    box-shadow .45s var(--ease-standard),
+    transform .45s var(--ease-standard);
+}
+.setup-progress span.active{
+  transform:scaleX(1.04);
+}
+.setup-input input{
+  transition:
+    border-color .24s var(--ease-standard),
+    box-shadow .24s var(--ease-standard),
+    transform .24s var(--ease-standard),
+    background-color .24s var(--ease-standard);
+}
+.setup-btn{
+  transition:
+    transform .22s var(--ease-standard),
+    filter .22s var(--ease-standard),
+    background-color .22s var(--ease-standard),
+    border-color .22s var(--ease-standard),
+    box-shadow .22s var(--ease-standard);
+}
+.setup-btn:active:not(:disabled){
+  transform:translateY(0) scale(.985);
+}
+.setup-sidebar:before{
+  animation:setupGlow 14s var(--ease-smooth) infinite alternate;
+  will-change:transform,opacity;
+}
+.setup-core{
+  animation:setupFloat 6.2s var(--ease-smooth) infinite;
+  will-change:transform;
+}
+.setup-node{
+  animation:setupNodeFloat 6.8s var(--ease-smooth) infinite;
+  will-change:transform;
+}
+.node-a{animation-delay:-1.1s}
+.node-b{animation-delay:-2.6s}
+.node-c{animation-delay:-4.2s}
+.setup-orbit{
+  animation:setupSpin 28s linear infinite;
+  will-change:transform;
+}
+.orbit-b{
+  animation-duration:42s;
+}
+.password-meter-bar span{
+  transition:width .38s var(--ease-standard),filter .38s var(--ease-standard);
+}
+.security-grid>div{
+  transition:
+    color .28s var(--ease-standard),
+    border-color .28s var(--ease-standard),
+    background-color .28s var(--ease-standard),
+    transform .28s var(--ease-standard);
+}
+.security-grid>div.ok{
+  transform:translateY(-1px);
+}
+@keyframes nordBootFloat{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(0,-6px,0)}
+}
+@keyframes nordPulse{
+  0%{transform:scale(.76);opacity:.72}
+  70%{opacity:.18}
+  100%{transform:scale(1.22);opacity:0}
+}
+@keyframes nordLoad{
+  0%{transform:translate3d(-145%,0,0);opacity:.2}
+  12%{opacity:1}
+  88%{opacity:1}
+  100%{transform:translate3d(345%,0,0);opacity:.15}
+}
+@keyframes statusSwap{
+  0%{opacity:0;transform:translate3d(0,5px,0)}
+  55%{opacity:1}
+  100%{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes setupEnter{
+  0%{opacity:0;transform:translate3d(0,8px,0) scale(.996)}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
+@keyframes setupStepIn{
+  0%{opacity:0;transform:translate3d(14px,0,0)}
+  100%{opacity:1;transform:translate3d(0,0,0)}
+}
+@keyframes setupGlow{
+  0%{transform:translate3d(-1.5%,-.8%,0) scale(1);opacity:.82}
+  100%{transform:translate3d(1.8%,1.5%,0) scale(1.035);opacity:1}
+}
+@keyframes setupFloat{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(0,-6px,0)}
+}
+@keyframes setupNodeFloat{
+  0%,100%{margin-top:0}
+  50%{margin-top:-5px}
+}
