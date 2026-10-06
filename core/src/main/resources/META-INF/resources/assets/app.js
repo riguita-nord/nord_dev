@@ -773,21 +773,46 @@ async function initNuiBuilder(p){
     if(label)label.textContent=autoFitUi?'Fit':Math.round(interfaceZoom*100)+'%';
   };
 
-  const previewRuntime=selected=>`
+  const previewPreboot=()=>`
     (()=>{
-      const selected=${JSON.stringify(selected)};
+      window.__nordPreviewErrors=[];
+      addEventListener('error',event=>{
+        const message=String(event.message||event.error||'Preview script error');
+        window.__nordPreviewErrors.push(message);
+        parent.postMessage({type:'nord-nui-preview-error',message},'*');
+      });
+      addEventListener('unhandledrejection',event=>{
+        const message=String(event.reason&&event.reason.message?event.reason.message:event.reason||'Unhandled preview rejection');
+        window.__nordPreviewErrors.push(message);
+        parent.postMessage({type:'nord-nui-preview-error',message},'*');
+      });
 
-      // Safe FiveM browser-preview shims. They never affect exported/saved source.
-      if(typeof window.GetParentResourceName!=='function')window.GetParentResourceName=()=> 'nord_preview';
-      if(typeof window.invokeNative!=='function')window.invokeNative=()=>{};
+      if(typeof window.GetParentResourceName!=='function'){
+        window.GetParentResourceName=()=> 'nord_preview';
+      }
+      if(typeof window.invokeNative!=='function'){
+        window.invokeNative=()=>{};
+      }
+
       const originalFetch=window.fetch?window.fetch.bind(window):null;
       window.fetch=(input,init)=>{
         const url=String(input&&input.url?input.url:input||'');
         if(/^https:\\/\\/[^/]+\\//i.test(url)||url.startsWith('nui://')||url.startsWith('https://cfx-nui-')){
-          return Promise.resolve(new Response('{}',{status:200,headers:{'Content-Type':'application/json'}}));
+          return Promise.resolve(new Response('{}',{
+            status:200,
+            headers:{'Content-Type':'application/json'}
+          }));
         }
-        return originalFetch?originalFetch(input,init):Promise.resolve(new Response('{}',{status:200}));
+        return originalFetch
+          ? originalFetch(input,init)
+          : Promise.resolve(new Response('{}',{status:200,headers:{'Content-Type':'application/json'}}));
       };
+    })();
+  `;
+
+  const previewRuntime=selected=>`
+    (()=>{
+      const selected=${JSON.stringify(selected)};
 
       const roots=[...document.querySelectorAll('[data-nord-interface]')];
       const selectedRoot=selected==='all'?null:roots.find(el=>el.getAttribute('data-nord-interface')===selected);
@@ -873,7 +898,6 @@ async function initNuiBuilder(p){
         if(!target)return;
 
         const requestFit=window.__nordFitState||{enabled:true,zoom:1};
-        // Always reset before measuring to avoid compounding transforms.
         if(selectedRoot){
           selectedRoot.style.removeProperty('transform');
           selectedRoot.style.removeProperty('transform-origin');
@@ -882,6 +906,13 @@ async function initNuiBuilder(p){
 
         requestAnimationFrame(()=>{
           const r=target.getBoundingClientRect();
+          if(!Number.isFinite(r.width)||!Number.isFinite(r.height)||r.width<2||r.height<2){
+            parent.postMessage({
+              type:'nord-nui-preview-empty',
+              interfaceId:selected
+            },'*');
+            return;
+          }
           const vw=Math.max(1,window.innerWidth);
           const vh=Math.max(1,window.innerHeight);
           const pad=28;
@@ -1021,14 +1052,19 @@ async function initNuiBuilder(p){
     const detected=detectInterfaces(html.value);
     refreshInterfacePicker(detected.items);
     const selected=selectedInterface;
+    const preboot=previewPreboot();
     const runtime=previewRuntime(selected);
-    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+preboot.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
     lastInterfaceBounds=null;
     frame.onload=()=>{
       setTimeout(()=>{
         replayRuntime();
-        setTimeout(replayRuntime,180);
-      },70);
+        applyCanvasZoom();
+      },90);
+      setTimeout(()=>{
+        replayRuntime();
+        applyCanvasZoom();
+      },320);
     };
     frame.srcdoc=documentHtml;
     requestAnimationFrame(applyCanvasZoom);
@@ -1097,6 +1133,16 @@ async function initNuiBuilder(p){
   const previewMessage=e=>{
     const data=e.data||{};
     if(data.interfaceId!==selectedInterface)return;
+    if(data.type==='nord-nui-preview-error'){
+      const stateEl=document.querySelector('#nui-save-state');
+      if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i> Preview JS: '+h(data.message||'error');
+      return;
+    }
+    if(data.type==='nord-nui-preview-empty'){
+      const stateEl=document.querySelector('#nui-save-state');
+      if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-eye-slash"></i> Selected interface has no visible area';
+      return;
+    }
     if(data.type==='nord-nui-preview-bounds'){
       lastInterfaceBounds={
         left:Number(data.left)||0,
