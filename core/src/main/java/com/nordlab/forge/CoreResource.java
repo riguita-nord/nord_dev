@@ -329,8 +329,14 @@ public class CoreResource {
             if(!imported.isEmpty()) releasePreview=imported;
         }
 
-        Map<String,Object> project=db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
-        if(project!=null){
+        Map<String,Object> project=db.one("SELECT product_id,source_release_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid);
+        Long latestReleaseId=latest==null?null:((Number)latest.get("id")).longValue();
+        Long projectReleaseId=(project==null||project.get("source_release_id")==null)?null:((Number)project.get("source_release_id")).longValue();
+        boolean projectMatchesLatest=project!=null && (
+            latestReleaseId==null || (projectReleaseId!=null && projectReleaseId.equals(latestReleaseId))
+        );
+
+        if(projectMatchesLatest){
             Map<String,Object> out=new LinkedHashMap<>(project);
             out.put("source","saved");
             out.put("detected",false);
@@ -380,15 +386,23 @@ public class CoreResource {
         String settings=forge.text(b,"settings_json");
         if(settings.isBlank()) settings="{\"viewport\":\"desktop\",\"background\":\"transparent\"}";
 
+        Map<String,Object> latest=db.one("""
+          SELECT id FROM releases
+          WHERE product_id=?
+          ORDER BY published DESC, created_at DESC
+          LIMIT 1
+          """,pid);
+        Long sourceReleaseId=latest==null?null:((Number)latest.get("id")).longValue();
+
         if(db.count("SELECT COUNT(*) FROM nui_projects WHERE product_id=?",pid)>0){
-            db.execute("UPDATE nui_projects SET html=?,css=?,js=?,settings_json=?,updated_at=CURRENT_TIMESTAMP WHERE product_id=?",
-                html,css,js,settings,pid);
+            db.execute("UPDATE nui_projects SET source_release_id=?,html=?,css=?,js=?,settings_json=?,updated_at=CURRENT_TIMESTAMP WHERE product_id=?",
+                sourceReleaseId,html,css,js,settings,pid);
         }else{
-            db.execute("INSERT INTO nui_projects(product_id,html,css,js,settings_json,updated_at) VALUES(?,?,?,?,?,CURRENT_TIMESTAMP)",
-                pid,html,css,js,settings);
+            db.execute("INSERT INTO nui_projects(product_id,source_release_id,html,css,js,settings_json,updated_at) VALUES(?,?,?,?,?,?,CURRENT_TIMESTAMP)",
+                pid,sourceReleaseId,html,css,js,settings);
         }
         forge.audit(wid,actor,"nui.saved",String.valueOf(pid),null);
-        return ok(db.one("SELECT product_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid));
+        return ok(db.one("SELECT product_id,source_release_id,html,css,js,settings_json,updated_at FROM nui_projects WHERE product_id=?",pid));
     }
 
     @GET @Path("/products/{pid}/workspace")
