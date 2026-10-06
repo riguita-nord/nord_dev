@@ -3376,3 +3376,61 @@
 .nui-preview-canvas{
   transform-origin:center center!important;
 }
+
+/* FiveM runtime preview controls */
+.nui-runtime-control{
+  height:32px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:170px;
+  max-width:250px;
+  padding:0 5px 0 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--panel);
+  color:var(--muted);
+  opacity:.72;
+}
+.nui-runtime-control.active{
+  opacity:1;
+  border-color:color-mix(in srgb,var(--brand) 38%,var(--line));
+  background:color-mix(in srgb,var(--brand) 5%,var(--panel));
+}
+.nui-runtime-control>i{
+  color:var(--brand2);
+  font-size:9px;
+}
+.nui-runtime-control select{
+  min-width:0;
+  flex:1 1 auto;
+  height:28px;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-size:8px;
+  font-weight:850;
+}
+.nui-runtime-control button{
+  width:25px;
+  height:24px;
+  flex:0 0 25px;
+  display:grid;
+  place-items:center;
+  border:0;
+  border-radius:7px;
+  background:color-mix(in srgb,var(--brand) 10%,var(--panel2));
+  color:var(--brand2);
+  cursor:pointer;
+}
+.nui-runtime-control button:hover{
+  background:var(--brand);
+  color:#fff;
+}
+@media(max-width:1320px){
+  .nui-runtime-control{
+    max-width:185px;
+    min-width:145px;
+  }
+}
