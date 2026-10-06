@@ -2453,3 +2453,58 @@
     offset-path:path("M 6 68 Q 128 4 250 68");
   }
 }
+
+/* Tighten transfer geometry so the route starts at the PC and reaches the server */
+.upload-transfer-visual{
+  width:min(620px,100%)!important;
+  grid-template-columns:88px minmax(260px,1fr) 88px!important;
+  gap:8px!important;
+}
+
+.transfer-route{
+  height:96px!important;
+  margin-left:-12px!important;
+  margin-right:-12px!important;
+  overflow:visible!important;
+}
+
+/* Keep line, dots and package on the exact same extended parabola */
+.transfer-file{
+  offset-path:path("M 6 78 Q 210 4 414 78")!important;
+}
+
+.transfer-dots span{
+  offset-path:path("M 6 78 Q 210 4 414 78")!important;
+}
+
+/* Pull the visible curve closer to each endpoint */
+.transfer-curve{
+  left:-2px!important;
+  right:-2px!important;
+  width:calc(100% + 4px)!important;
+}
+
+/* Make the endpoint nodes visually meet the route */
+.transfer-pc{
+  margin-right:-4px;
+}
+.transfer-server{
+  margin-left:-4px;
+}
+
+@media(max-width:620px){
+  .upload-transfer-visual{
+    grid-template-columns:70px minmax(170px,1fr) 70px!important;
+    gap:5px!important;
+  }
+  .transfer-route{
+    margin-left:-8px!important;
+    margin-right:-8px!important;
+  }
+  .transfer-file{
+    offset-path:path("M 5 68 Q 165 4 325 68")!important;
+  }
+  .transfer-dots span{
+    offset-path:path("M 5 68 Q 165 4 325 68")!important;
+  }
+}
