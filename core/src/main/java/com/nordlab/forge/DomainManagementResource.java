@@ -254,6 +254,7 @@ public class DomainManagementResource {
             db.execute("DELETE FROM purchase_threads WHERE product_id=?",pid);
             db.execute("UPDATE support_tickets SET product_id=NULL WHERE product_id=?",pid);
 
+            db.execute("DELETE FROM nui_projects WHERE product_id=?",pid);
             db.execute("DELETE FROM releases WHERE product_id=?",pid);
             int deleted=db.execute("DELETE FROM products WHERE id=?",pid);
             if(deleted==0) throw new IllegalStateException("product_delete_failed");
