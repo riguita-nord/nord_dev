@@ -753,7 +753,7 @@ function createProduct(){
                     '<button type="button" class="commerce-mode '+(Number(draft.price_cents)>0?'active':'')+'" id="pc-paid"><i class="fa-solid fa-credit-card"></i><span><strong>Paid product</strong><small>Use the configured price in your store.</small></span></button>'+
                   '</div>'+
                   '<div class="split">'+
-                    '<div class="field"><label>Price</label><div class="price-input"><input id="pc-price" type="number" min="0" step="1" value="'+h(draft.price_cents)+'"><span>cents</span></div><small>'+h(price)+'</small></div>'+
+                    '<div class="field"><label>Price</label><div class="price-input"><input id="pc-price" type="number" min="0" step="1" value="'+h(draft.price_cents)+'"><span>cents</span></div><small id="pc-price-display">'+h(price)+'</small></div>'+
                     '<div class="field"><label>Currency</label><select id="pc-currency"><option '+(draft.currency==='EUR'?'selected':'')+'>EUR</option><option '+(draft.currency==='USD'?'selected':'')+'>USD</option><option '+(draft.currency==='GBP'?'selected':'')+'>GBP</option></select></div>'+
                   '</div>'+
                   '<div class="product-commerce-note"><i class="fa-solid fa-circle-info"></i><div><strong>Product starts as a draft</strong><span>The first release is uploaded during this wizard. You can publish the product afterwards.</span></div></div>'+
@@ -796,7 +796,7 @@ function createProduct(){
                 '<h3>'+h(draft.name||'Untitled product')+'</h3>'+
                 '<p>'+h(draft.description||'Your product description will appear here.')+'</p>'+
                 '<div class="product-preview-meta"><span><i class="fa-solid fa-tag"></i> '+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</span><span><i class="fa-solid '+protection[1]+'"></i> '+h(protection[2])+'</span><span><i class="fa-solid fa-code-branch"></i> v'+h(draft.release_version||'1.0.0')+'</span></div>'+
-                '<div class="product-preview-price">'+h(price)+'</div>'+
+                '<div class="product-preview-price" id="pc-preview-price">'+h(price)+'</div>'+
               '</article>'+
               '<div class="product-preview-status">'+
                 '<div class="'+(draft.name.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.name.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Product identity</span></div>'+
@@ -823,7 +823,18 @@ function createProduct(){
     if(desc)desc.oninput=e=>draft.description=e.target.value;
     document.querySelectorAll('[data-product-category]').forEach(b=>b.onclick=()=>{draft.category=b.dataset.productCategory;draw()});
     const priceInput=document.querySelector('#pc-price'),currency=document.querySelector('#pc-currency');
-    if(priceInput)priceInput.oninput=e=>{draft.price_cents=Math.max(0,Number(e.target.value)||0)};
+    if(priceInput)priceInput.oninput=e=>{
+      draft.price_cents=Math.max(0,Number(e.target.value)||0);
+      const live=money(draft.price_cents,draft.currency);
+      const display=document.querySelector('#pc-price-display');
+      const preview=document.querySelector('#pc-preview-price');
+      if(display)display.textContent=live;
+      if(preview)preview.textContent=live;
+      const free=document.querySelector('#pc-free');
+      const paid=document.querySelector('#pc-paid');
+      if(free)free.classList.toggle('active',Number(draft.price_cents)===0);
+      if(paid)paid.classList.toggle('active',Number(draft.price_cents)>0);
+    };
     if(currency)currency.onchange=e=>{draft.currency=e.target.value;draw()};
     const free=document.querySelector('#pc-free'),paid=document.querySelector('#pc-paid');
     if(free)free.onclick=()=>{draft.price_cents=0;draw()};
