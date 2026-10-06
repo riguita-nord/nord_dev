@@ -654,7 +654,163 @@ async function runWorkspaceProvisioning(workspace){
   });
 }
 
-function createProduct(){modal('New product','<form class="form"><div class="field"><label>Name</label><input name="name" required></div><div class="field"><label>Category</label><input name="category" placeholder="inventory, housing, utility..."></div><div class="field"><label>Description</label><textarea name="description" rows="5"></textarea></div><div class="split"><div class="field"><label>Price cents</label><input name="price_cents" type="number" value="0"></div><div class="field"><label>Currency</label><select name="currency"><option>EUR</option><option>USD</option><option>GBP</option></select></div></div><div class="field"><label>Protection mode</label><select name="protection_mode"><option>LICENSE_ONLY</option><option>NONE</option><option>PROTECTED_BUILD</option></select></div></form>',async fd=>{await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({name:formVal(fd,'name'),category:formVal(fd,'category'),description:formVal(fd,'description'),price_cents:Number(formVal(fd,'price_cents')||0),currency:formVal(fd,'currency'),license_required:formVal(fd,'protection_mode')!=='NONE',protection_mode:formVal(fd,'protection_mode')})});toast('Product created');loadView()})}
+function createProduct(){
+  const draft={
+    step:1,
+    name:'',
+    slug:'',
+    category:'resource',
+    description:'',
+    price_cents:0,
+    currency:'EUR',
+    protection_mode:'LICENSE_ONLY',
+    license_required:true
+  };
+  const categories=[
+    ['resource','fa-cube','Resource'],
+    ['inventory','fa-boxes-stacked','Inventory'],
+    ['housing','fa-house','Housing'],
+    ['vehicles','fa-car','Vehicles'],
+    ['jobs','fa-briefcase','Jobs'],
+    ['utility','fa-screwdriver-wrench','Utility']
+  ];
+  const protectionOptions=[
+    ['NONE','fa-unlock','No protection','No runtime license or protection checks.'],
+    ['LICENSE_ONLY','fa-key','License only','Require a valid Forge license at runtime.'],
+    ['PROTECTED_BUILD','fa-shield-halved','Protected build','License validation plus Forge runtime protection.']
+  ];
+  const categoryIcon=()=>((categories.find(x=>x[0]===draft.category)||categories[0])[1]);
+  const draw=()=>{
+    const price=money(draft.price_cents,draft.currency);
+    const protection=protectionOptions.find(x=>x[0]===draft.protection_mode)||protectionOptions[1];
+    modalRoot.innerHTML=
+      '<div class="modal-layer product-wizard-layer">'+
+        '<div class="product-create-wizard">'+
+          '<header class="product-create-head">'+
+            '<div><div class="side-kicker">New product</div><h2>Create a Forge product</h2><p>Configure identity, commerce and runtime behavior before Forge creates the draft.</p></div>'+
+            '<button class="icon-btn" id="product-wizard-close"><i class="fa-solid fa-xmark"></i></button>'+
+          '</header>'+
+          '<div class="product-create-progress">'+
+            [1,2,3,4].map((i)=>'<div class="'+(i===draft.step?'current':i<draft.step?'done':'')+'"><span>'+(i<draft.step?'<i class="fa-solid fa-check"></i>':i)+'</span><small>'+['Identity','Commerce','Protection','Review'][i-1]+'</small></div>').join('')+
+          '</div>'+
+          '<div class="product-create-layout">'+
+            '<section class="product-create-stage">'+
+              (draft.step===1?
+                '<div class="product-create-step">'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div><div><div class="side-kicker">Step 1</div><h3>Product identity</h3><p>Define how this product appears throughout Forge.</p></div></div>'+
+                  '<div class="field"><label>Name</label><input id="pc-name" value="'+h(draft.name)+'" placeholder="Nord Inventory" autofocus></div>'+
+                  '<div class="field"><label>Slug</label><div class="input-icon"><i class="fa-solid fa-link"></i><input id="pc-slug" value="'+h(draft.slug)+'" placeholder="nord-inventory"></div><small>Used in URLs and runtime identification.</small></div>'+
+                  '<div class="field"><label>Category</label><div class="product-category-grid">'+categories.map(x=>'<button type="button" class="'+(draft.category===x[0]?'active':'')+'" data-product-category="'+x[0]+'"><i class="fa-solid '+x[1]+'"></i><span>'+x[2]+'</span></button>').join('')+'</div></div>'+
+                  '<div class="field"><label>Description</label><textarea id="pc-description" rows="5" placeholder="What does this product do?">'+h(draft.description)+'</textarea></div>'+
+                '</div>':'')+
+              (draft.step===2?
+                '<div class="product-create-step">'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon"><i class="fa-solid fa-tags"></i></div><div><div class="side-kicker">Step 2</div><h3>Commerce</h3><p>Set the default price and billing currency.</p></div></div>'+
+                  '<div class="product-commerce-grid">'+
+                    '<button type="button" class="commerce-mode '+(Number(draft.price_cents)===0?'active':'')+'" id="pc-free"><i class="fa-solid fa-gift"></i><span><strong>Free product</strong><small>Customers can claim it without payment.</small></span></button>'+
+                    '<button type="button" class="commerce-mode '+(Number(draft.price_cents)>0?'active':'')+'" id="pc-paid"><i class="fa-solid fa-credit-card"></i><span><strong>Paid product</strong><small>Use the configured price in your store.</small></span></button>'+
+                  '</div>'+
+                  '<div class="split">'+
+                    '<div class="field"><label>Price</label><div class="price-input"><input id="pc-price" type="number" min="0" step="1" value="'+h(draft.price_cents)+'"><span>cents</span></div><small>'+h(price)+'</small></div>'+
+                    '<div class="field"><label>Currency</label><select id="pc-currency"><option '+(draft.currency==='EUR'?'selected':'')+'>EUR</option><option '+(draft.currency==='USD'?'selected':'')+'>USD</option><option '+(draft.currency==='GBP'?'selected':'')+'>GBP</option></select></div>'+
+                  '</div>'+
+                  '<div class="product-commerce-note"><i class="fa-solid fa-circle-info"></i><div><strong>Starts as a draft</strong><span>The product will only be publishable after it has a published release.</span></div></div>'+
+                '</div>':'')+
+              (draft.step===3?
+                '<div class="product-create-step">'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon"><i class="fa-solid fa-shield-halved"></i></div><div><div class="side-kicker">Step 3</div><h3>Licensing & protection</h3><p>Choose how Forge protects and validates this product.</p></div></div>'+
+                  '<div class="product-protection-options">'+protectionOptions.map(x=>'<button type="button" class="'+(draft.protection_mode===x[0]?'active':'')+'" data-product-protection="'+x[0]+'"><div class="protection-option-icon"><i class="fa-solid '+x[1]+'"></i></div><div><strong>'+x[2]+'</strong><span>'+x[3]+'</span></div><i class="fa-solid fa-circle-check"></i></button>').join('')+'</div>'+
+                  '<div class="product-license-summary"><i class="fa-solid '+protection[1]+'"></i><div><strong>'+protection[2]+'</strong><span>'+(draft.protection_mode==='NONE'?'License requirement will be disabled.':'Forge licensing will be enabled for this product.')+'</span></div></div>'+
+                '</div>':'')+
+              (draft.step===4?
+                '<div class="product-create-step">'+
+                  '<div class="wizard-step-heading"><div class="wizard-icon success"><i class="fa-solid fa-rocket"></i></div><div><div class="side-kicker">Step 4</div><h3>Ready to create</h3><p>Review the configuration before creating the product draft.</p></div></div>'+
+                  '<div class="product-review-grid">'+
+                    '<div><span>Name</span><strong>'+h(draft.name)+'</strong></div>'+
+                    '<div><span>Slug</span><strong>'+h(draft.slug)+'</strong></div>'+
+                    '<div><span>Category</span><strong>'+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</strong></div>'+
+                    '<div><span>Price</span><strong>'+h(price)+'</strong></div>'+
+                    '<div><span>Protection</span><strong>'+h(protection[2])+'</strong></div>'+
+                    '<div><span>Initial status</span><strong>Draft</strong></div>'+
+                  '</div>'+
+                  '<div class="product-ready-banner"><i class="fa-solid fa-circle-check"></i><div><strong>Configuration complete</strong><span>After creation you will continue inside the new Product Workspace.</span></div></div>'+
+                '</div>':'')+
+            '</section>'+
+            '<aside class="product-create-preview">'+
+              '<div class="product-preview-label">Live preview</div>'+
+              '<article class="product-preview-card">'+
+                '<div class="product-preview-top"><div class="product-preview-icon"><i class="fa-solid '+categoryIcon()+'"></i></div><span class="pill warn">draft</span></div>'+
+                '<h3>'+h(draft.name||'Untitled product')+'</h3>'+
+                '<p>'+h(draft.description||'Your product description will appear here.')+'</p>'+
+                '<div class="product-preview-meta"><span><i class="fa-solid fa-tag"></i> '+h((categories.find(x=>x[0]===draft.category)||categories[0])[2])+'</span><span><i class="fa-solid '+protection[1]+'"></i> '+h(protection[2])+'</span></div>'+
+                '<div class="product-preview-price">'+h(price)+'</div>'+
+              '</article>'+
+              '<div class="product-preview-status"><div class="'+(draft.name.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.name.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Product identity</span></div><div class="'+(draft.slug.trim().length>=2?'ok':'')+'"><i class="fa-solid '+(draft.slug.trim().length>=2?'fa-check':'fa-minus')+'"></i><span>Valid slug</span></div><div class="ok"><i class="fa-solid fa-check"></i><span>Runtime policy</span></div></div>'+
+            '</aside>'+
+          '</div>'+
+          '<footer class="product-create-foot">'+
+            '<button class="btn" id="product-wizard-back" '+(draft.step===1?'disabled':'')+'><i class="fa-solid fa-arrow-left"></i> Back</button>'+
+            '<div class="product-create-foot-right">'+
+              '<span>Step '+draft.step+' of 4</span>'+
+              (draft.step<4?'<button class="btn primary" id="product-wizard-next">Continue <i class="fa-solid fa-arrow-right"></i></button>':'<button class="btn primary" id="product-wizard-create"><i class="fa-solid fa-plus"></i> Create product</button>')+
+            '</div>'+
+          '</footer>'+
+        '</div>'+
+      '</div>';
+
+    document.querySelector('#product-wizard-close').onclick=()=>modalRoot.innerHTML='';
+    const name=document.querySelector('#pc-name'),slug=document.querySelector('#pc-slug'),desc=document.querySelector('#pc-description');
+    if(name)name.oninput=e=>{draft.name=e.target.value;if(!draft.slugTouched)draft.slug=draft.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')};
+    if(slug)slug.oninput=e=>{draft.slugTouched=true;draft.slug=e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'')};
+    if(desc)desc.oninput=e=>draft.description=e.target.value;
+    document.querySelectorAll('[data-product-category]').forEach(b=>b.onclick=()=>{draft.category=b.dataset.productCategory;draw()});
+    const priceInput=document.querySelector('#pc-price'),currency=document.querySelector('#pc-currency');
+    if(priceInput)priceInput.oninput=e=>{draft.price_cents=Math.max(0,Number(e.target.value)||0)};
+    if(currency)currency.onchange=e=>{draft.currency=e.target.value;draw()};
+    const free=document.querySelector('#pc-free'),paid=document.querySelector('#pc-paid');
+    if(free)free.onclick=()=>{draft.price_cents=0;draw()};
+    if(paid)paid.onclick=()=>{if(Number(draft.price_cents)===0)draft.price_cents=1000;draw()};
+    document.querySelectorAll('[data-product-protection]').forEach(b=>b.onclick=()=>{draft.protection_mode=b.dataset.productProtection;draft.license_required=draft.protection_mode!=='NONE';draw()});
+    document.querySelector('#product-wizard-back').onclick=()=>{if(draft.step>1){draft.step--;draw()}};
+    const next=document.querySelector('#product-wizard-next');
+    if(next)next.onclick=()=>{
+      if(draft.step===1){
+        if(draft.name.trim().length<2)return toast('Enter a product name.');
+        if(!draft.slug.trim())draft.slug=draft.name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+        if(draft.slug.length<2)return toast('Enter a valid product slug.');
+      }
+      if(draft.step===2&&Number(draft.price_cents)<0)return toast('Price cannot be negative.');
+      draft.step++;draw();
+    };
+    const create=document.querySelector('#product-wizard-create');
+    if(create)create.onclick=async()=>{
+      create.disabled=true;create.innerHTML='<i class="fa-solid fa-circle-notch fa-spin"></i> Creating product...';
+      try{
+        const product=await api('/workspaces/'+state.workspace.id+'/products',{method:'POST',body:JSON.stringify({
+          name:draft.name.trim(),
+          slug:draft.slug.trim(),
+          category:draft.category,
+          description:draft.description.trim(),
+          price_cents:Number(draft.price_cents)||0,
+          currency:draft.currency,
+          license_required:draft.protection_mode!=='NONE',
+          protection_mode:draft.protection_mode
+        })});
+        modalRoot.innerHTML='';
+        state.productId=product.id;
+        state.productTab='overview';
+        state.view='products';
+        toast('Product created');
+        renderShell();loadView();
+      }catch(e){
+        toast(e.message);
+        create.disabled=false;
+        create.innerHTML='<i class="fa-solid fa-plus"></i> Create product';
+      }
+    };
+  };
+  draw();
+}
 async function publishProduct(id){try{const products=await api('/workspaces/'+state.workspace.id+'/products');const p=products.find(x=>String(x.id)===String(id));await api('/products/'+id,{method:'PUT',body:JSON.stringify({name:p.name,description:p.description,category:p.category,price_cents:p.price_cents,currency:p.currency,license_required:p.license_required,protection_mode:p.protection_mode,status:'published'})});toast('Product published');loadView()}catch(e){toast(e.message)}}
 function createRelease(products){if(!products.length)return toast('Create a product first.');modal('Upload release','<form class="form"><div class="field"><label>Product</label><select name="product_id">'+products.map(p=>'<option value="'+p.id+'">'+h(p.name)+'</option>').join('')+'</select></div><div class="field"><label>Version</label><input name="version" placeholder="2.0.0" required></div><div class="field"><label>ZIP file</label><input name="file" type="file" accept=".zip" required></div><div class="field"><label>Changelog</label><textarea name="changelog" rows="5"></textarea></div></form>',async fd=>{const file=fd.get('file');if(!file||!file.size)throw new Error('ZIP file required');const base64=await fileBase64(file);await api('/products/'+formVal(fd,'product_id')+'/releases',{method:'POST',body:JSON.stringify({version:formVal(fd,'version'),file_name:file.name,file_base64:base64,changelog:formVal(fd,'changelog'),published:true})});toast('Release uploaded');loadView()})}
 function fileBase64(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result).split(',')[1]);r.onerror=reject;r.readAsDataURL(file)})}
