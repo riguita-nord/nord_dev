@@ -720,8 +720,19 @@ async function initNuiBuilder(p){
     if(!picker)return;
     const wanted=selectedInterface;
     picker.innerHTML='<option value="all">All interfaces</option>'+items.map(x=>'<option value="'+h(x.id)+'">'+h(x.name)+'</option>').join('');
-    if(wanted!=='all'&&items.some(x=>x.id===wanted))picker.value=wanted;
-    else{selectedInterface='all';picker.value='all'}
+
+    if(wanted!=='all'&&items.some(x=>x.id===wanted)){
+      selectedInterface=wanted;
+    }else if(items.length){
+      // "All" is useful only after the user explicitly requests it.
+      // On first load choose a real surface so hidden FiveM roots become visible immediately.
+      selectedInterface=items[0].id;
+      settings.interface=selectedInterface;
+    }else{
+      selectedInterface='all';
+    }
+
+    picker.value=selectedInterface;
     picker.parentElement.classList.toggle('multiple',items.length>1);
   };
 
@@ -806,6 +817,20 @@ async function initNuiBuilder(p){
             }
           });
         });
+
+        // Many FiveM scripts hide #app again after boot while waiting for SendNUIMessage.
+        // Keep ONLY the selected root and required ancestors visible.
+        const keepSelectedVisible=()=>[...chain].reverse().forEach(forceVisible);
+        new MutationObserver(mutations=>{
+          if(mutations.some(m=>chain.has(m.target)))keepSelectedVisible();
+        }).observe(document.body,{
+          subtree:true,
+          attributes:true,
+          attributeFilter:['class','style','hidden']
+        });
+        setTimeout(keepSelectedVisible,50);
+        setTimeout(keepSelectedVisible,250);
+        setTimeout(keepSelectedVisible,750);
       }
 
       const reportBounds=()=>{
