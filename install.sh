@@ -40,9 +40,20 @@ install_deps(){
 
 ensure_user(){
   id nordforge >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin nordforge
-  mkdir -p "$ROOT" "$ETC" "$DATA/db" "$DATA/storage/releases" "$DATA/storage/protection-modules" "$DATA/control" "$BACKUPS" "$LEGACY_BACKUPS"
-  chown -R nordforge:nordforge "$DATA"
-  chmod 0750 "$LEGACY_BACKUPS"
+
+  install -d -o root -g nordforge -m 0750 "$ROOT"
+  install -d -o root -g nordforge -m 0755 "$ROOT/bin"
+  install -d -o root -g nordforge -m 0750 "$ETC"
+
+  install -d -o nordforge -g nordforge -m 0750 "$DATA"
+  install -d -o nordforge -g nordforge -m 0750 "$DATA/db"
+  install -d -o nordforge -g nordforge -m 0750 "$DATA/storage"
+  install -d -o nordforge -g nordforge -m 0750 "$DATA/storage/releases"
+  install -d -o nordforge -g nordforge -m 0750 "$DATA/storage/protection-modules"
+  install -d -o nordforge -g nordforge -m 0750 "$DATA/control"
+  install -d -o nordforge -g nordforge -m 0750 "$BACKUPS"
+
+  install -d -o root -g root -m 0750 "$LEGACY_BACKUPS"
 }
 
 secret(){
@@ -195,10 +206,18 @@ remove_legacy_installation(){
 }
 
 install_files(){
-  install -m 0755 -d "$ROOT/bin"
-  install -m 0755 "core/target/nord-forge-core-$VERSION-runner.jar" "$ROOT/bin/nord-forge-core.jar"
-  install -m 0755 "admin-service/target/nord-forge-admin-$VERSION-runner.jar" "$ROOT/bin/nord-forge-admin.jar"
+  ensure_user
+
+  install -o root -g nordforge -m 0755 "core/target/nord-forge-core-$VERSION-runner.jar" "$ROOT/bin/nord-forge-core.jar"
+  install -o root -g nordforge -m 0755 "admin-service/target/nord-forge-admin-$VERSION-runner.jar" "$ROOT/bin/nord-forge-admin.jar"
   printf '%s\n' "$VERSION" > "$ROOT/VERSION"
+  chown root:nordforge "$ROOT/VERSION"
+  chmod 0644 "$ROOT/VERSION"
+
+  [[ -r "$ROOT/bin/nord-forge-core.jar" ]] || die "Installed core JAR is missing or unreadable."
+  [[ -r "$ROOT/bin/nord-forge-admin.jar" ]] || die "Installed admin JAR is missing or unreadable."
+  runuser -u nordforge -- test -r "$ROOT/bin/nord-forge-core.jar" || die "nordforge cannot read the core JAR."
+  runuser -u nordforge -- test -r "$ROOT/bin/nord-forge-admin.jar" || die "nordforge cannot read the admin JAR."
 
   install -m 0755 scripts/nord-forge /usr/local/bin/nord-forge
   install -m 0755 -d /usr/local/libexec
