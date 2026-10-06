@@ -659,7 +659,7 @@ function createProduct(){
     step:1,
     name:'',
     slug:'',
-    category:'resource',
+    category:'scripts',
     description:'',
     price_cents:0,
     currency:'EUR',
@@ -667,12 +667,11 @@ function createProduct(){
     license_required:true
   };
   const categories=[
-    ['resource','fa-cube','Resource'],
-    ['inventory','fa-boxes-stacked','Inventory'],
-    ['housing','fa-house','Housing'],
-    ['vehicles','fa-car','Vehicles'],
-    ['jobs','fa-briefcase','Jobs'],
-    ['utility','fa-screwdriver-wrench','Utility']
+    ['scripts','fa-code','Scripts'],
+    ['mlos','fa-building','MLOs'],
+    ['components','fa-shirt','Components'],
+    ['bots','fa-robot','Bots'],
+    ['other','fa-shapes','Other']
   ];
   const protectionOptions=[
     ['NONE','fa-unlock','No protection','No runtime license or protection checks.'],
