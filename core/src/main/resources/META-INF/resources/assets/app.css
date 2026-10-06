@@ -3257,3 +3257,54 @@
     min-height:360px!important;
   }
 }
+
+/* NUI Builder independent interface selector */
+.nui-interface-control{
+  height:32px;
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:132px;
+  max-width:210px;
+  padding:0 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:var(--panel);
+  color:var(--muted);
+}
+.nui-interface-control>i{
+  flex:0 0 auto;
+  color:var(--brand2);
+  font-size:9px;
+}
+.nui-interface-control select{
+  min-width:0;
+  width:100%;
+  height:28px;
+  padding:0 18px 0 0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-size:8px;
+  font-weight:850;
+  cursor:pointer;
+}
+.nui-interface-control:not(.multiple){
+  opacity:.72;
+}
+.nui-interface-control.multiple{
+  border-color:color-mix(in srgb,var(--brand) 34%,var(--line));
+  background:color-mix(in srgb,var(--brand) 5%,var(--panel));
+}
+.nui-toolbar-separator{
+  width:1px;
+  height:20px;
+  background:var(--line);
+  margin:0 2px;
+}
+@media(max-width:1180px){
+  .nui-interface-control{
+    max-width:160px;
+  }
+}
