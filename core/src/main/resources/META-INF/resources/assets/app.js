@@ -708,10 +708,23 @@ async function initNuiBuilder(p){
     candidates=candidates.filter((el,i,arr)=>!arr.some((other,j)=>j!==i&&other.contains(el)&&!/(app|root|wrapper|container)/i.test((other.id||'')+' '+(other.className||''))));
     if(!candidates.length)candidates=[...doc.body.children].filter(valid).slice(0,1);
 
-    candidates.slice(0,12).forEach((el,index)=>el.setAttribute('data-nord-interface',String(index)));
+    const usedKeys=new Set();
+    const items=candidates.slice(0,12).map((el,index)=>{
+      let key=(el.id||'').trim();
+      if(!key){
+        const useful=[...el.classList].find(x=>!['container','wrapper','root','app','main','content','ui','hidden','hide','d-none'].includes(x.toLowerCase()));
+        key=useful||('interface-'+index);
+      }
+      key=key.replace(/[^A-Za-z0-9_-]/g,'-')||('interface-'+index);
+      let stable=key,n=2;
+      while(usedKeys.has(stable))stable=key+'-'+(n++);
+      usedKeys.add(stable);
+      el.setAttribute('data-nord-interface',stable);
+      return {id:stable,name:interfaceName(el,index)};
+    });
     return {
       html:doc.body.innerHTML,
-      items:candidates.slice(0,12).map((el,index)=>({id:String(index),name:interfaceName(el,index)}))
+      items
     };
   };
 
@@ -742,19 +755,46 @@ async function initNuiBuilder(p){
 
   let autoFitUi=settings.auto_fit_ui!==false;
   let interfaceZoom=1;
+  let lastInterfaceBounds=null;
 
   const applyCanvasZoom=()=>{
     if(!canvas||!stage)return;
     const sizes={desktop:[1920,1080],tablet:[1024,1366],mobile:[390,844]};
     const size=sizes[settings.viewport||'desktop']||sizes.desktop;
-    const availableW=Math.max(1,stage.clientWidth-20);
-    const availableH=Math.max(1,stage.clientHeight-20);
-    const base=Math.min(availableW/size[0],availableH/size[1],1);
-    const scale=Math.min(base*interfaceZoom,2.6);
+    const stageW=Math.max(1,stage.clientWidth);
+    const stageH=Math.max(1,stage.clientHeight);
+    const margin=18;
+    const availableW=Math.max(1,stageW-(margin*2));
+    const availableH=Math.max(1,stageH-(margin*2));
+
     canvas.style.width=size[0]+'px';
     canvas.style.height=size[1]+'px';
-    canvas.style.transform='scale('+scale+')';
-    canvas.style.transformOrigin='center center';
+    canvas.style.position='absolute';
+    canvas.style.left='0';
+    canvas.style.top='0';
+    canvas.style.transformOrigin='0 0';
+
+    let scale=Math.min(availableW/size[0],availableH/size[1],1);
+    let centerX=size[0]/2;
+    let centerY=size[1]/2;
+
+    if(autoFitUi&&lastInterfaceBounds&&selectedInterface!=='all'){
+      const b=lastInterfaceBounds;
+      const fit=Math.min(
+        availableW/Math.max(1,b.width),
+        availableH/Math.max(1,b.height)
+      )*0.90;
+      scale=Math.max(scale,Math.min(fit,3.5));
+      centerX=(Number(b.left)||0)+(Math.max(1,Number(b.width)||1)/2);
+      centerY=(Number(b.top)||0)+(Math.max(1,Number(b.height)||1)/2);
+    }else if(!autoFitUi){
+      scale=Math.min(scale*Math.max(0.5,interfaceZoom),3.5);
+    }
+
+    const tx=(stageW/2)-(centerX*scale);
+    const ty=(stageH/2)-(centerY*scale);
+    canvas.style.transform='matrix('+scale+',0,0,'+scale+','+tx+','+ty+')';
+
     const label=document.querySelector('#nui-zoom-label');
     if(label)label.textContent=autoFitUi?'Fit':Math.round(interfaceZoom*100)+'%';
   };
@@ -846,6 +886,11 @@ async function initNuiBuilder(p){
         });
         parent.postMessage({
           type:'nord-nui-preview-bounds',
+          interfaceId:selected,
+          left,
+          top,
+          right,
+          bottom,
           width:Math.max(1,right-left),
           height:Math.max(1,bottom-top),
           viewportWidth:innerWidth,
@@ -864,6 +909,7 @@ async function initNuiBuilder(p){
     const selected=selectedInterface;
     const runtime=previewRuntime(selected);
     const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
+    lastInterfaceBounds=null;
     frame.srcdoc=documentHtml;
     requestAnimationFrame(applyCanvasZoom);
   };
@@ -894,6 +940,8 @@ async function initNuiBuilder(p){
   if(interfaceSelect)interfaceSelect.onchange=()=>{
     selectedInterface=interfaceSelect.value||'all';
     settings.interface=selectedInterface;
+    lastInterfaceBounds=null;
+    interfaceZoom=1;
     renderPreview();
   };
   selectedInterface=settings.interface||'all';
@@ -909,14 +957,15 @@ async function initNuiBuilder(p){
 
   const previewMessage=e=>{
     const data=e.data||{};
-    if(data.type!=='nord-nui-preview-bounds'||!autoFitUi)return;
-    const vw=Math.max(1,Number(data.viewportWidth)||1920);
-    const vh=Math.max(1,Number(data.viewportHeight)||1080);
-    const iw=Math.max(1,Number(data.width)||vw);
-    const ih=Math.max(1,Number(data.height)||vh);
-    // Increase small/centered NUIs, but keep some breathing room and avoid absurd zoom.
-    interfaceZoom=Math.max(1,Math.min(2.25,(Math.min(vw/iw,vh/ih))*0.84));
-    applyCanvasZoom();
+    if(data.type!=='nord-nui-preview-bounds')return;
+    if(data.interfaceId!==selectedInterface)return;
+    lastInterfaceBounds={
+      left:Number(data.left)||0,
+      top:Number(data.top)||0,
+      width:Math.max(1,Number(data.width)||1),
+      height:Math.max(1,Number(data.height)||1)
+    };
+    if(autoFitUi)applyCanvasZoom();
   };
   window.addEventListener('message',previewMessage);
 
