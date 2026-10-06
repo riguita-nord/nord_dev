@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Compatibility launcher kept for servers that still have the old nord-dev name.
+# The Forge V2 launcher owns the actual install/update flow.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -x "$SELF_DIR/nord-forge-installer.run" ]]; then
+  exec "$SELF_DIR/nord-forge-installer.run" "$@"
+fi
+
+if [[ -x /opt/nord-forge/nord-forge-installer.run ]]; then
+  exec /opt/nord-forge/nord-forge-installer.run "$@"
+fi
+
+echo "[Nord Dev -> Forge V2] Compatibility launcher cannot find nord-forge-installer.run." >&2
+echo "Download the current nord_dev main source or run the legacy updater once so it fetches Forge V2." >&2
+exit 1
