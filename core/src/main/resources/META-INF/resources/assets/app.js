@@ -556,7 +556,7 @@ function renderProductWorkspace(d){
           '</aside>'+
           '<main class="nui-builder-preview-area">'+
             '<div class="nui-preview-stage desktop" id="nui-preview-stage">'+
-              '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts"></iframe>'+
+              '<iframe id="nui-preview" title="NUI live preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>'+
               '<aside class="nui-structure-explorer" id="nui-structure-explorer" hidden>'+
                 '<div class="nui-structure-head"><div><strong>NUI Structure</strong><span id="nui-structure-interface">Detecting interface…</span></div><button id="nui-structure-close"><i class="fa-solid fa-xmark"></i></button></div>'+
                 '<div class="nui-structure-body" id="nui-structure-body"><div class="nui-structure-empty"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Scanning NUI…</span></div></div>'+
@@ -649,6 +649,10 @@ async function initNuiBuilder(p){
   }else{
     if(sourceLabel)sourceLabel.textContent='New visual workspace for '+p.name;
   }
+  const liveReleasePreview=project.source==='release'&&project.source_entry;
+  const livePreviewUrl=liveReleasePreview
+    ? '/api/v2/products/'+p.id+'/nui/live/'+String(project.source_entry).split('/').map(encodeURIComponent).join('/')
+    : '';
   let settings={viewport:'desktop',background:'transparent'};
   try{settings={...settings,...JSON.parse(project.settings_json||'{}')}}catch(e){}
 
@@ -1303,30 +1307,44 @@ async function initNuiBuilder(p){
     const item=runtimePayload();
     if(!item||!frame.contentWindow)return;
     try{
-      frame.contentWindow.postMessage(item.payload,'*');
+      if(liveReleasePreview){
+        frame.contentWindow.postMessage({__nordRuntimePayload:true,payload:item.payload},'*');
+      }else{
+        frame.contentWindow.postMessage(item.payload,'*');
+      }
       const stateEl=document.querySelector('#nui-save-state');
       if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-bolt"></i> Runtime: '+h(item.label||'SendNUIMessage');
     }catch(e){}
   };
 
   const renderPreview=()=>{
+    lastInterfaceBounds=null;
+
+    if(liveReleasePreview){
+      frame.onload=()=>{
+        setTimeout(()=>replayRuntime(),120);
+        setTimeout(()=>replayRuntime(),420);
+        setTimeout(()=>{
+          try{frame.contentWindow.postMessage({type:'nord-live-scan'},'*')}catch(e){}
+        },520);
+      };
+      frame.removeAttribute('srcdoc');
+      const separator=livePreviewUrl.includes('?')?'&':'?';
+      frame.src=livePreviewUrl+separator+'t='+Date.now();
+      return;
+    }
+
     const detected=detectInterfaces(html.value);
     refreshInterfacePicker(detected.items);
     const selected=selectedInterface;
     const preboot=previewPreboot();
     const runtime=previewRuntime(selected);
     const documentHtml='<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{width:100%;min-height:100%;margin:0;}'+previewCss(css.value)+'</style></head><body>'+detected.html+'<script>'+preboot.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+js.value.replace(/<\/script/gi,'<\\/script')+'<\/script><script>'+runtime.replace(/<\/script/gi,'<\\/script')+'<\/script></body></html>';
-    lastInterfaceBounds=null;
     frame.onload=()=>{
-      setTimeout(()=>{
-        replayRuntime();
-        applyCanvasZoom();
-      },90);
-      setTimeout(()=>{
-        replayRuntime();
-        applyCanvasZoom();
-      },320);
+      setTimeout(()=>{replayRuntime();applyCanvasZoom()},90);
+      setTimeout(()=>{replayRuntime();applyCanvasZoom()},320);
     };
+    frame.removeAttribute('src');
     frame.srcdoc=documentHtml;
     requestAnimationFrame(applyCanvasZoom);
   };
@@ -1359,7 +1377,12 @@ async function initNuiBuilder(p){
     settings.interface=selectedInterface;
     lastInterfaceBounds=null;
     interfaceZoom=1;
-    renderPreview();
+    if(liveReleasePreview){
+      try{frame.contentWindow.postMessage({type:'nord-live-force-interface',id:selectedInterface},'*')}catch(e){}
+      replayRuntime();
+    }else{
+      renderPreview();
+    }
   };
   selectedInterface=settings.interface||'all';
 
@@ -1394,6 +1417,28 @@ async function initNuiBuilder(p){
   const previewMessage=e=>{
     const data=e.data||{};
     if(data.interfaceId!==selectedInterface)return;
+    if(data.type==='nord-live-interfaces'){
+      const items=Array.isArray(data.items)?data.items:[];
+      if(items.length){
+        const picker=document.querySelector('#nui-interface-select');
+        if(picker){
+          picker.innerHTML='<option value="all">All interfaces</option>'+items.map(x=>'<option value="'+h(x.id)+'">'+h(x.name||x.id)+'</option>').join('');
+          if(selectedInterface==='all'||!items.some(x=>x.id===selectedInterface)){
+            selectedInterface=items[0].id;
+            settings.interface=selectedInterface;
+          }
+          picker.value=selectedInterface;
+          picker.parentElement.classList.toggle('multiple',items.length>1);
+          try{frame.contentWindow.postMessage({type:'nord-live-force-interface',id:selectedInterface},'*')}catch(e){}
+        }
+      }
+      return;
+    }
+    if(data.type==='nord-live-preview-error'){
+      const stateEl=document.querySelector('#nui-save-state');
+      if(stateEl)stateEl.innerHTML='<i class="fa-solid fa-triangle-exclamation"></i> Live preview: '+h(data.message||'error');
+      return;
+    }
     if(data.type==='nord-nui-structure'){
       renderStructure(data.structure||{});
       return;
