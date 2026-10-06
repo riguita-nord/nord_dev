@@ -156,6 +156,18 @@ public class CoreResource {
             forge.text(b,"name").isBlank()?p.get("name"):forge.text(b,"name"),forge.text(b,"description"),forge.text(b,"category"),forge.longValue(b,"price_cents",((Number)p.get("price_cents")).longValue()),forge.text(b,"currency").isBlank()?p.get("currency"):forge.text(b,"currency"),forge.bool(b,"license_required",Boolean.TRUE.equals(p.get("license_required"))),forge.text(b,"protection_mode").isBlank()?p.get("protection_mode"):forge.text(b,"protection_mode"),status,pid);
         forge.audit(wid,actor,"product.updated",String.valueOf(pid),status); return ok(db.one("SELECT * FROM products WHERE id=?",pid));
     }
+    @GET @Path("/workspaces/{wid}/releases")
+    public Response workspaceReleases(@PathParam("wid") long wid,@CookieParam("NF_SESSION") String session){
+        forge.requireWorkspace(uid(session),wid);
+        return ok(db.query("""
+          SELECT r.id,r.product_id,p.name product_name,r.version,r.changelog,r.file_name,r.published,r.created_at
+          FROM releases r
+          JOIN products p ON p.id=r.product_id
+          WHERE p.workspace_id=?
+          ORDER BY r.created_at DESC
+          """,wid));
+    }
+
     @GET @Path("/products/{pid}/releases")
     public Response releases(@PathParam("pid") long pid,@CookieParam("NF_SESSION") String session){
         Map<String,Object> p=db.one("SELECT workspace_id FROM products WHERE id=?",pid); if(p==null) throw new NotFoundException("product_not_found"); forge.requireWorkspace(uid(session),((Number)p.get("workspace_id")).longValue()); return ok(db.query("SELECT id,product_id,version,changelog,file_name,published,created_at FROM releases WHERE product_id=? ORDER BY created_at DESC",pid));
